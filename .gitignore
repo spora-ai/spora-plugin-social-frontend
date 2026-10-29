@@ -11,6 +11,9 @@
 /coverage/
 /coverage.xml
 
+# SonarQube scanner scratch
+/.scannerwork/
+
 # Release packaging artifacts (CI staging + tarballs)
 /package/
 /staging/
