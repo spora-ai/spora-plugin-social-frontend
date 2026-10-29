@@ -100,10 +100,24 @@ export default defineConfig({
             provider: 'v8',
             reporter: ['text', 'lcov', 'html'],
             reportsDirectory: './coverage',
-            // Mirrors sonar.coverage.exclusions — excludes Vue SFCs / type-only files
-            // so the coverage number reflects exercised code, not an inflated denominator.
-            include: ['src/api/**/*.ts', 'src/stores/**/*.ts', 'src/composables/**/*.ts', 'src/i18n/**/*.ts', 'src/lib/**/*.ts'],
-            exclude: ['src/main.ts', 'src/dev-main.ts', 'src/shims.ts', 'src/types.ts', 'src/**/*.{vue,css}'],
+            // Every source file the tests could exercise, Vue SFCs included:
+            // the components are the app, and a coverage number that leaves
+            // them out says nothing about what the operator sees.
+            include: ['src/**/*.{ts,vue}'],
+            // `dev-main.ts` is the dev sandbox's bootstrap — only index.html
+            // loads it, production ships main.ts — and `types.ts` is
+            // type-only, so it is erased before the code runs and has nothing
+            // to measure.
+            exclude: ['src/dev-main.ts', 'src/types.ts', 'src/**/*.css'],
+            // The floor the suite has to stay above. Without a threshold the
+            // coverage report is a number nobody looks at, and coverage
+            // drifts down one uncovered branch at a time.
+            thresholds: {
+                statements: 90,
+                branches: 90,
+                functions: 90,
+                lines: 90,
+            },
         },
     },
 })

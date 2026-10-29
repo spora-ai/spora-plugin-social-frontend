@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { Router } from 'vue-router'
 import { HOST_CONTEXT_KEY, type PluginHostContext } from '../src/shims'
+import { recordNavigation } from './mountPage'
 
 type HostRouteArg = {
     path: string
@@ -21,10 +22,12 @@ type HostRouteArg = {
 function fakeHostRouter(initial: { path: string; query?: Record<string, unknown> }) {
     let guard: ((to: HostRouteArg, from: unknown, failure?: unknown) => void) | null = null
 
+    const [initialPath, initialSearch] = initial.path.split('?')
     const currentRoute = {
         value: {
-            ...initial,
+            path: initialPath ?? initial.path,
             fullPath: initial.path,
+            query: initial.query ?? Object.fromEntries(new URLSearchParams(initialSearch ?? '')),
         } as { path: string; fullPath?: string; query?: Record<string, unknown> },
     }
 
@@ -48,16 +51,21 @@ function fakeHostRouter(initial: { path: string; query?: Record<string, unknown>
             }
         },
         navigate(to: { path: string; query?: Record<string, unknown> }, failure?: unknown): void {
-            currentRoute.value = {
-                ...to,
+            const [path, search] = to.path.split('?')
+            const route = {
+                path: path ?? to.path,
                 fullPath: to.path,
+                query: to.query ?? Object.fromEntries(new URLSearchParams(search ?? '')),
             }
-            guard?.(to, undefined, failure)
+            currentRoute.value = route
+            guard?.(route, undefined, failure)
         },
     }
 }
 
-function makeHostContext(router: ReturnType<typeof fakeHostRouter> | null): PluginHostContext {
+type HostRouter = ReturnType<typeof fakeHostRouter>
+
+function makeHostContext(router: HostRouter | null): PluginHostContext {
     return {
         api: {
             get: vi.fn().mockImplementation((path: string) => {
@@ -92,27 +100,50 @@ function makeTarget(): HTMLElement {
     return target
 }
 
+type MainModule = typeof import('../src/main')
+
+interface HostMount {
+    main: MainModule
+    target: HTMLElement
+    hostRouter: HostRouter
+    context: PluginHostContext
+    record: { router: Router }
+}
+
 /**
- * Record which kind of navigation the local router was asked for.
+ * The app mounted into a host document, the way the host mounts it.
  *
- * The memory history's depth is not exposed, so the call itself is the
- * observation: a `replace` is what a host navigation must produce, and a
- * `push` is what a local navigation must produce.
+ * The host's own context is what the plugin is given at runtime: its router,
+ * its API client, its media picker. A test that mounts the app has to hand
+ * it a context that behaves like the host's, or the mirroring contract is
+ * not being tested at all.
  */
-function recordNavigation(router: Router): string[] {
-    const calls: string[] = []
-    const originalReplace = router.replace.bind(router)
-    const originalPush = router.push.bind(router)
+async function mountInHost(hostPath: string | null): Promise<HostMount> {
+    const main = await import('../src/main')
+    const target = makeTarget()
+    // A null path mounts the app without a host router — the standalone
+    // case, where the plugin owns the whole page. The router is built either
+    // way, so the handle this returns has one shape.
+    const hostRouter = fakeHostRouter({ path: hostPath ?? '' })
+    const context = makeHostContext(hostPath === null ? null : hostRouter)
 
-    router.replace = ((...args: unknown[]) => {
-        calls.push('replace')
-        return (originalReplace as (...a: unknown[]) => unknown)(...args)
-    }) as unknown as Router['replace']
-    router.push = ((...args: unknown[]) => {
-        calls.push('push')
-        return (originalPush as (...a: unknown[]) => unknown)(...args)
-    }) as unknown as Router['push']
+    await main.default.mount(target, context)
+    await flushPromises()
 
+    const record = (target as unknown as { __sporaApp: { router: Router } }).__sporaApp
+    return { main, target, hostRouter, context, record }
+}
+
+/** The host navigates; the app mirrors it. */
+async function hostNavigates(host: HostMount, path: string): Promise<void> {
+    host.hostRouter.navigate({ path })
+    await flushPromises()
+}
+
+/** Watch the local router's navigations from here on. */
+function watchNavigation(host: HostMount): string[] {
+    const calls = recordNavigation(host.record.router)
+    calls.length = 0
     return calls
 }
 
@@ -134,202 +165,119 @@ describe('SporaApp (main.ts mount contract)', () => {
     })
 
     it('mounts into the target and renders the shell', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        await main.default.mount(target, makeHostContext(null))
-        await flushPromises()
-
-        expect(target.querySelector('#spora-plugin-social')).not.toBeNull()
+        const host = await mountInHost(null)
+        expect(host.target.querySelector('#spora-plugin-social')).not.toBeNull()
     })
 
     it('opens the section the host URL names', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const hostRouter = fakeHostRouter({ path: '/apps/social/p/7/accounts' })
+        const host = await mountInHost('/apps/social/p/7/accounts')
+        expect(host.target.querySelector('[data-test="accounts-page"]')).not.toBeNull()
+    })
 
-        await main.default.mount(target, makeHostContext(hostRouter))
+    it('canonicalises an unknown section instead of rendering a blank screen', async () => {
+        const host = await mountInHost('/apps/social/p/7/bogus')
+
+        expect(host.record.router.currentRoute.value.path).toBe('/p/7/compose')
+        expect(host.hostRouter.push).toHaveBeenCalledWith('/apps/social/p/7/compose')
+        expect(host.target.querySelector('[data-test="compose-page"]')).not.toBeNull()
+    })
+
+    it('never selects a principal the caller cannot act as', async () => {
+        const host = await mountInHost('/apps/social/p/99/accounts')
+
+        // The foreign principal is replaced with the caller's own, and the
+        // operator is told why rather than shown a missing page.
+        expect(host.record.router.currentRoute.value.path).toBe('/p/7/accounts')
+        expect(host.target.querySelector('[data-test="principal-notice"]')).not.toBeNull()
+    })
+
+    it('round-trips: a URL copied into a new tab opens the same view', async () => {
+        const first = await mountInHost('/apps/social/p/7/posts')
+        await first.record.router.push('/p/7/posts/analytics')
         await flushPromises()
 
-        expect(target.querySelector('[data-test="accounts-page"]')).not.toBeNull()
+        const copied = first.hostRouter.push.mock.calls.at(-1)?.[0]
+        expect(copied).toBe('/apps/social/p/7/posts/analytics')
+
+        // The second session: the copied URL is opened in a new tab.
+        const second = await mountInHost(copied as string)
+        expect(second.record.router.currentRoute.value.path).toBe('/p/7/posts/analytics')
+        expect(second.target.querySelector('[data-test="posts-page"]')).not.toBeNull()
+    })
+})
+
+describe('SporaApp in a host document', () => {
+    let host: HostMount
+
+    beforeEach(async () => {
+        host = await mountInHost('/apps/social/p/7/compose')
     })
 
     it('mirrors a host navigation into the local route with a replace', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const hostRouter = fakeHostRouter({ path: '/apps/social/p/7/compose' })
-        const context = makeHostContext(hostRouter)
+        const calls = watchNavigation(host)
 
-        await main.default.mount(target, context)
-        await flushPromises()
+        await hostNavigates(host, '/apps/social/p/7/calendar')
 
-        const record = (target as unknown as { __sporaApp: { router: Router } }).__sporaApp
-        const calls = recordNavigation(record.router)
-        calls.length = 0
-
-        hostRouter.navigate({ path: '/apps/social/p/7/calendar' })
-        await flushPromises()
-
-        expect(record.router.currentRoute.value.path).toBe('/p/7/calendar')
+        expect(host.record.router.currentRoute.value.path).toBe('/p/7/calendar')
         // A replace, not a push: the host has already pushed, and counting it
         // twice would leave the local stack out of step with the browser's.
         expect(calls).toEqual(['replace'])
     })
 
     it('writes the host URL when the app navigates, with a push', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const hostRouter = fakeHostRouter({ path: '/apps/social/p/7/compose' })
+        const calls = watchNavigation(host)
 
-        await main.default.mount(target, makeHostContext(hostRouter))
+        await host.record.router.push('/p/7/posts')
         await flushPromises()
 
-        const record = (target as unknown as { __sporaApp: { router: Router } }).__sporaApp
-        const calls = recordNavigation(record.router)
-        calls.length = 0
-
-        await record.router.push('/p/7/posts')
-        await flushPromises()
-
-        expect(hostRouter.push).toHaveBeenCalledWith('/apps/social/p/7/posts')
+        expect(host.hostRouter.push).toHaveBeenCalledWith('/apps/social/p/7/posts')
         expect(calls).toEqual(['push'])
     })
 
-    it('does not replace the local route when the host navigation changes nothing', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const hostRouter = fakeHostRouter({ path: '/apps/social/p/7/calendar' })
-        const context = makeHostContext(hostRouter)
-
-        await main.default.mount(target, context)
-        await flushPromises()
-
-        const record = (target as unknown as { __sporaApp: { router: Router } }).__sporaApp
-        const calls = recordNavigation(record.router)
-        calls.length = 0
-
-        // The host is already there — a redundant replace would churn the
-        // local route for no reason, and the guard is what stops it.
-        hostRouter.navigate({ path: '/apps/social/p/7/calendar' })
-        await flushPromises()
-
-        expect(calls).toEqual([])
-    })
-
     it('does not ping-pong between the two routers', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const hostRouter = fakeHostRouter({ path: '/apps/social/p/7/compose' })
-
-        await main.default.mount(target, makeHostContext(hostRouter))
-        await flushPromises()
-
-        const record = (target as unknown as { __sporaApp: { router: Router } }).__sporaApp
-        hostRouter.push.mockClear()
+        host.hostRouter.push.mockClear()
 
         for (const path of ['/p/7/posts', '/p/7/calendar', '/p/7/accounts']) {
-            await record.router.push(path)
+            await host.record.router.push(path)
             await flushPromises()
         }
 
         // One push per navigation the operator made — no extras from the echo.
-        expect(hostRouter.push.mock.calls.length).toBe(3)
-        expect(hostRouter.push).toHaveBeenLastCalledWith('/apps/social/p/7/accounts')
+        expect(host.hostRouter.push.mock.calls).toHaveLength(3)
+        expect(host.hostRouter.push).toHaveBeenLastCalledWith('/apps/social/p/7/accounts')
     })
 
-    it('canonicalises an unknown section instead of rendering a blank screen', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const hostRouter = fakeHostRouter({ path: '/apps/social/p/7/bogus' })
+    it('unregisters the host listener on unmount', () => {
+        expect(host.hostRouter.registered).toBe(1)
 
-        await main.default.mount(target, makeHostContext(hostRouter))
-        await flushPromises()
-
-        const record = (target as unknown as { __sporaApp: { router: Router } }).__sporaApp
-
-        expect(record.router.currentRoute.value.path).toBe('/p/7/compose')
-        expect(hostRouter.push).toHaveBeenCalledWith('/apps/social/p/7/compose')
-        expect(target.querySelector('[data-test="compose-page"]')).not.toBeNull()
-    })
-
-    it('never selects a principal the caller cannot act as', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const hostRouter = fakeHostRouter({ path: '/apps/social/p/99/accounts' })
-        const context = makeHostContext(hostRouter)
-        context.api.get = vi.fn().mockImplementation((path: string) => {
-            if (path === '/principals/me') {
-                return Promise.resolve({
-                    principals: [
-                        { id: 7, type: 'user', name: 'Maya Fischer', user_id: 3, group_id: null },
-                        { id: 8, type: 'group', name: 'Studio', user_id: null, group_id: 2 },
-                    ],
-                })
-            }
-            return Promise.resolve({})
-        })
-
-        await main.default.mount(target, context)
-        await flushPromises()
-
-        const record = (target as unknown as { __sporaApp: { router: Router } }).__sporaApp
-
-        // The foreign principal is replaced with the caller's own, and the
-        // operator is told why rather than shown a missing page.
-        expect(record.router.currentRoute.value.path).toBe('/p/7/accounts')
-        expect(target.querySelector('[data-test="principal-notice"]')).not.toBeNull()
-    })
-
-    it('round-trips: a URL copied into a new tab opens the same view', async () => {
-        const main = await import('../src/main')
-
-        // The first session: the operator navigates to the analytics view.
-        const firstTarget = makeTarget()
-        const firstHost = fakeHostRouter({ path: '/apps/social/p/7/posts' })
-        await main.default.mount(firstTarget, makeHostContext(firstHost))
-        await flushPromises()
-
-        const firstRecord = (firstTarget as unknown as { __sporaApp: { router: Router } }).__sporaApp
-        await firstRecord.router.push('/p/7/posts/analytics')
-        await flushPromises()
-
-        const copied = firstHost.push.mock.calls.at(-1)?.[0]
-        expect(copied).toBe('/apps/social/p/7/posts/analytics')
-
-        // The second session: the copied URL is opened in a new tab.
-        const secondTarget = makeTarget()
-        const secondHost = fakeHostRouter({ path: copied as string })
-        await main.default.mount(secondTarget, makeHostContext(secondHost))
-        await flushPromises()
-
-        const secondRecord = (secondTarget as unknown as { __sporaApp: { router: Router } }).__sporaApp
-        expect(secondRecord.router.currentRoute.value.path).toBe('/p/7/posts/analytics')
-        expect(secondTarget.querySelector('[data-test="posts-page"]')).not.toBeNull()
-    })
-
-    it('unregisters the host listener on unmount', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const hostRouter = fakeHostRouter({ path: '/apps/social/p/7/compose' })
-
-        await main.default.mount(target, makeHostContext(hostRouter))
-        await flushPromises()
-        expect(hostRouter.registered).toBe(1)
-
-        main.default.unmount(target)
-        expect(hostRouter.registered).toBe(0)
+        host.main.default.unmount(host.target)
+        expect(host.hostRouter.registered).toBe(0)
     })
 
     it('remounting the same target replaces the prior app', async () => {
-        const main = await import('../src/main')
-        const target = makeTarget()
-        const context = makeHostContext(fakeHostRouter({ path: '/apps/social/p/7/compose' }))
-
-        await main.default.mount(target, context)
-        await flushPromises()
-        await main.default.mount(target, context)
+        await host.main.default.mount(host.target, host.context)
         await flushPromises()
 
-        expect(target.querySelector('#spora-plugin-social')).not.toBeNull()
+        expect(host.target.querySelector('#spora-plugin-social')).not.toBeNull()
+    })
+})
+
+describe('SporaApp and a host navigation that changes nothing', () => {
+    it.each([
+        ['the host is already there', '/apps/social/p/7/calendar', '/apps/social/p/7/calendar'],
+        [
+            'only the query order changed',
+            '/apps/social/p/7/accounts?ref=host&tab=list',
+            '/apps/social/p/7/accounts?tab=list&ref=host',
+        ],
+        ['another app’s panel', '/apps/social/p/7/accounts', '/apps/gallery/p/7/pictures'],
+    ])('does not replace the local route when %s', async (_what, mountPath, navigation) => {
+        const host = await mountInHost(mountPath)
+        const calls = watchNavigation(host)
+
+        await hostNavigates(host, navigation)
+
+        expect(calls).toEqual([])
     })
 })
 

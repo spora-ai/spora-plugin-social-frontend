@@ -202,8 +202,11 @@ describe('api/social — the shapes', () => {
     it('says so when a list arrives as something else', async () => {
         // A shape change must be loud: an envelope the frontend invented is
         // how the two halves came to disagree about a payload.
-        get.mockResolvedValueOnce({ connections: [] })
+        get.mockResolvedValue({ connections: [] })
         await expect(social.listConnections(3)).rejects.toThrow('did not answer with a list')
+        // A type error, not a generic one: the caller can tell a wrong shape
+        // from a failed request.
+        await expect(social.listConnections(3)).rejects.toThrow(TypeError)
     })
 
     it('reads the provider entries of the config', async () => {
@@ -245,6 +248,35 @@ describe('api/social — the shapes', () => {
 
         expect(config.providers.meta.configured).toBe(false)
         expect(config.providers.meta.client_id).toBe('spora-meta-app-id')
+    })
+
+    it('treats a notice with no wording as no notice', async () => {
+        // The card must not render an empty notice.
+        get.mockResolvedValueOnce({
+            providers: {
+                meta: {
+                    configured: false,
+                    needs_setup: { title: '   ', body: 'Add the app id.' },
+                },
+            },
+        })
+        const config = await social.getConfig()
+
+        expect(config.providers.meta.needs_setup).toBeNull()
+    })
+
+    it('treats a notice with no body as no notice', async () => {
+        get.mockResolvedValueOnce({
+            providers: {
+                meta: {
+                    configured: false,
+                    needs_setup: { title: 'Meta integration needs setup', body: '' },
+                },
+            },
+        })
+        const config = await social.getConfig()
+
+        expect(config.providers.meta.needs_setup).toBeNull()
     })
 
     it('reads the setup notice of an unconfigured provider', async () => {

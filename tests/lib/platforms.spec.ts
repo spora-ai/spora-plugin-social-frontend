@@ -91,4 +91,16 @@ describe('lib/platforms', () => {
         expect(brandColorVar('linkedin')).toBe('var(--platform-linkedin)')
         expect(chartColorVar('linkedin')).not.toBe(brandColorVar('linkedin'))
     })
+
+    it('counts an absent body as no characters', () => {
+        expect(charCount('', rules.linkedin!.max_text).n).toBe(0)
+    })
+
+    it('accepts an asset with no mime type of its own', () => {
+        // Nothing to judge it against is not a refusal: the backend refuses
+        // the file, not the composer.
+        const fit = mediaFit({ mime_type: null, size_bytes: 1000 }, rules.instagram!)
+
+        expect(fit.fits).toBe(true)
+    })
 })

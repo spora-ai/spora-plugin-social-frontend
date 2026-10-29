@@ -31,7 +31,11 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install
-        run: npm ci
+        # `--ignore-scripts` keeps a dependency's install-time lifecycle
+        # scripts from running. The lockfile pins every version, but a
+        # lifecycle script is arbitrary code from the registry — and none of
+        # this tree needs one.
+        run: npm ci --ignore-scripts
 
       - name: Lint
         # `npm run lint` runs ESLint over `src/` + `tests/` + `*.{ts,vue}`.
@@ -53,10 +57,9 @@ jobs:
         run: npm run i18n:check
 
       - name: Code style
-        # ESLint already carries the style rules; this step re-runs it in
-        # autofix mode and fails when anything would change, so a
-        # formatting-only PR cannot merge against a red default.
-        run: npx eslint . --max-warnings 0
+        # The same ESLint run as above, but with warnings as errors: a
+        # formatting-only PR must not merge against a red default.
+        run: npm run lint -- --max-warnings 0
 
   coverage:
     name: Coverage
@@ -75,7 +78,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run tests with coverage
         run: npm run test:coverage
@@ -115,7 +118,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build
         # Runs `vue-tsc && vite build` — emits frontend/main.js + style.css.
@@ -174,7 +177,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build
         run: npm run build
@@ -222,7 +225,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run tests with coverage
         run: npm run test:coverage
@@ -307,7 +310,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build
         # vue-tsc + vite build, output goes to frontend/ (per vite.config.ts).

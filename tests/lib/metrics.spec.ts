@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { formatCounter, postEngagementRate, postReach } from '../../src/lib/metrics'
+import {
+    formatCounter,
+    measuredTargets,
+    postEngagementRate,
+    postEngagements,
+    postPlatforms,
+    postReach,
+} from '../../src/lib/metrics'
 import { makeMetrics, makePost, makeTarget } from '../fixtures'
 import type { SocialPost } from '../../src/types'
 
@@ -66,5 +73,35 @@ describe('lib/metrics — a null is not a zero', () => {
         expect(formatCounter(null)).toBe('—')
         expect(formatCounter(0)).toBe('0')
         expect(formatCounter(4820)).toBe('4,820')
+    })
+
+    it('counts the targets that carry a reading', () => {
+        expect(measuredTargets(makePost({ targets: [makeTarget({ metrics: null })] }))).toBe(0)
+        expect(measuredTargets(postWithReaches(100, 250))).toBe(2)
+    })
+
+    it('sums the engagements of every target', () => {
+        // A counter that was not reported contributes nothing, the same way a
+        // target with no reach contributes nothing to the reach.
+        const post = makePost({
+            targets: [
+                makeTarget({ metrics: makeMetrics({ likes: 20, comments: 2, shares: 1, saves: 3 }) }),
+                makeTarget({ id: 502, metrics: null }),
+            ],
+        })
+
+        expect(postEngagements(post)).toBe(26)
+    })
+
+    it('names the platforms a post went to, once each', () => {
+        const post = makePost({
+            targets: [
+                makeTarget({ id: 501, platform: 'linkedin' }),
+                makeTarget({ id: 502, platform: 'linkedin' }),
+                makeTarget({ id: 503, platform: 'instagram' }),
+            ],
+        })
+
+        expect(postPlatforms(post)).toEqual(['linkedin', 'instagram'])
     })
 })

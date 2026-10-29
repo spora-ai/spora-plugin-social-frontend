@@ -92,7 +92,10 @@ function postWhen(post: SocialPost): string | null {
                     :key="post.id"
                     class="cursor-pointer border-b border-border align-top transition-colors last:border-b-0 hover:bg-muted/30"
                     :data-test="`post-row-${post.id}`"
+                    tabindex="0"
                     @click="openPost(post)"
+                    @keydown.enter.prevent="openPost(post)"
+                    @keydown.space.prevent="openPost(post)"
                 >
                     <td class="px-3 py-2.5">
                         <div class="flex items-start gap-3">

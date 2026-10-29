@@ -15,7 +15,7 @@ describe('ConnectionsGrid', () => {
 
         expect(wrapper.find('[data-test="connection-1"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="connection-2"]').exists()).toBe(true)
-        expect(wrapper.findAll('[data-test^="connection-"]').filter((card) => card.attributes('data-test')?.match(/^connection-\d+$/)).length).toBe(2)
+        expect(wrapper.findAll('[data-test^="connection-"]').filter((card) => card.attributes('data-test')?.match(/^connection-\d+$/))).toHaveLength(2)
     })
 
     it('shows both accounts a Meta connection covers, with their platform badges', () => {

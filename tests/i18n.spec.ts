@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import en from '../src/locales/en.json'
@@ -42,5 +42,14 @@ describe('the catalogue', () => {
         // They are labels, so they must not be in the catalogue.
         expect(en).not.toHaveProperty('LinkedIn')
         expect(en).not.toHaveProperty('Instagram')
+    })
+
+    it('falls back to the key when no instance has been created yet', async () => {
+        // A fresh module registry, so the composer is as empty as it is
+        // before `main.ts` builds the instance.
+        vi.resetModules()
+        const { t } = await import('../src/i18n')
+
+        expect(t('Save')).toBe('Save')
     })
 })

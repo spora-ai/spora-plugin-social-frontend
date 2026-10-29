@@ -35,7 +35,7 @@ function dateKey(date: Date): string {
 
 /** The first day of the month, at local midnight. */
 const first = computed(() => {
-    const [year, month] = props.month.split('-').map((part) => Number(part))
+    const [year, month] = props.month.split('-').map(Number)
     return new Date(year ?? 1970, (month ?? 1) - 1, 1)
 })
 

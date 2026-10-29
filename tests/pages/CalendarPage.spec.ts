@@ -74,4 +74,71 @@ describe('CalendarPage', () => {
         expect(paths.some((path) => path.includes('/plans'))).toBe(false)
         expect(paths.some((path) => path.includes('/schedules'))).toBe(false)
     })
+
+    it('reads the month the operator moved to', async () => {
+        const pinia = createPinia()
+
+        const router = makeRouter()
+        await router.push('/p/7/calendar')
+        await router.isReady()
+
+        const get = vi.fn().mockResolvedValue({ posts: [] })
+        const context = hostContext()
+        context.api.get = get as never
+
+        const wrapper = mountPage(CalendarPage, pinia, router, context)
+        await flushPromises()
+        get.mockClear()
+
+        await wrapper.find('[data-test="calendar-next"]').trigger('click')
+        await flushPromises()
+
+        expect(get).toHaveBeenCalledWith('/plugins/social/calendar', {
+            principal_id: 7,
+            month: expect.any(String),
+        })
+    })
+
+    it('reloads the month when the principal changes', async () => {
+        const pinia = createPinia()
+
+        const router = makeRouter()
+        await router.push('/p/7/calendar')
+        await router.isReady()
+
+        const get = vi.fn().mockResolvedValue({ posts: [] })
+        const context = hostContext()
+        context.api.get = get as never
+
+        mountPage(CalendarPage, pinia, router, context)
+        await flushPromises()
+        get.mockClear()
+
+        await router.push('/p/8/calendar')
+        await flushPromises()
+
+        expect(get).toHaveBeenCalledWith('/plugins/social/calendar', {
+            principal_id: 8,
+            month: expect.any(String),
+        })
+    })
+
+    it('asks for nothing without a principal', async () => {
+        const pinia = createPinia()
+
+        const router = makeRouter()
+        await router.push('/')
+        await router.isReady()
+
+        const get = vi.fn().mockResolvedValue({ posts: [] })
+        const context = hostContext()
+        context.api.get = get as never
+
+        mountPage(CalendarPage, pinia, router, context)
+        await flushPromises()
+
+        // A path without a principal names no scope, so there is nothing to
+        // ask the backend about.
+        expect(get).not.toHaveBeenCalled()
+    })
 })

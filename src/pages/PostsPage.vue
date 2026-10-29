@@ -225,6 +225,7 @@ watch(drawerPostId, () => {
             class="fixed inset-0 z-40 flex justify-end bg-foreground/35"
             data-test="post-drawer"
             @click.self="closeDrawer"
+            @keydown.esc="closeDrawer"
         >
             <aside class="h-full w-full max-w-md overflow-y-auto border-l border-border bg-background shadow-xl">
                 <div class="flex items-start justify-between gap-3 border-b border-border p-4">

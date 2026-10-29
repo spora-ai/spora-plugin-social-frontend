@@ -20,19 +20,19 @@ import { HOST_CONTEXT_KEY, type PluginHostContext } from './shims'
  * because its strings are not the operator's.
  */
 const emptyApi = {
-    get: async <T = unknown>(path: string): Promise<T> => {
+    get: <T = unknown>(path: string): Promise<T> => {
         if (path === '/principals/me') {
-            return {
+            return Promise.resolve({
                 principals: [
                     { id: 1, type: 'user', name: 'Dev operator', user_id: 1, group_id: null },
                     { id: 2, type: 'group', name: 'Dev group', user_id: null, group_id: 1 },
                 ],
-            } as unknown as T
+            } as unknown as T)
         }
         // The shapes here are the backend's, not invented ones: the provider
         // entries are objects, and the list endpoints answer with a bare list.
         if (path.includes('/plugins/social/config')) {
-            return {
+            return Promise.resolve({
                 providers: {
                     meta: {
                         configured: true,
@@ -56,21 +56,21 @@ const emptyApi = {
                 app_url: 'http://localhost:5195',
                 app_url_public: false,
                 rules: {},
-            } as unknown as T
+            } as unknown as T)
         }
-        if (path.includes('/plugins/social/connections')) return [] as unknown as T
-        if (path.includes('/plugins/social/posts')) return { items: [], total: 0 } as unknown as T
-        if (path.includes('/plugins/social/media')) return [] as unknown as T
-        if (path.includes('/plugins/social/calendar')) return { days: [], posts: [] } as unknown as T
+        if (path.includes('/plugins/social/connections')) return Promise.resolve([] as unknown as T)
+        if (path.includes('/plugins/social/posts')) return Promise.resolve({ items: [], total: 0 } as unknown as T)
+        if (path.includes('/plugins/social/media')) return Promise.resolve([] as unknown as T)
+        if (path.includes('/plugins/social/calendar')) return Promise.resolve({ days: [], posts: [] } as unknown as T)
         if (path.includes('/plugins/social/analytics/summary')) {
-            return { totals: {}, by_network: [], series: [], top_posts: [], notes: [] } as unknown as T
+            return Promise.resolve({ totals: {}, by_network: [], series: [], top_posts: [], notes: [] } as unknown as T)
         }
-        return {} as T
+        return Promise.resolve({} as T)
     },
-    post: async <T = unknown>(): Promise<T> => ({}) as T,
-    put: async <T = unknown>(): Promise<T> => ({}) as T,
-    patch: async <T = unknown>(): Promise<T> => ({}) as T,
-    delete: async <T = unknown>(): Promise<T> => ({ deleted: true }) as T,
+    post: <T = unknown>(): Promise<T> => Promise.resolve({} as T),
+    put: <T = unknown>(): Promise<T> => Promise.resolve({} as T),
+    patch: <T = unknown>(): Promise<T> => Promise.resolve({} as T),
+    delete: <T = unknown>(): Promise<T> => Promise.resolve({ deleted: true } as T),
 }
 
 const hostContext: PluginHostContext = {
@@ -80,7 +80,7 @@ const hostContext: PluginHostContext = {
     locale: new URLSearchParams(window.location.search).get('locale') ?? 'en',
     route: { path: '/apps/social', params: {}, query: {} },
     router: null,
-    openMediaPicker: async () => [],
+    openMediaPicker: () => Promise.resolve([]),
 }
 
 setApi(hostContext.api)

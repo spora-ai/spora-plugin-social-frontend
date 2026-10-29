@@ -1,35 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
-import { createPinia } from 'pinia'
-import { createMemoryHistory, createRouter } from 'vue-router'
 import App from '../src/App.vue'
-import { APP_ROUTES } from '../src/lib/routes'
-import { usePrincipalsStore } from '../src/stores/principals'
-import { hostContext, mountPage } from './mountPage'
-
-function makeRouter() {
-    const stub = { template: '<div />' }
-    return createRouter({
-        history: createMemoryHistory(),
-        routes: APP_ROUTES.map(({ path, name }) => ({ path, name, component: stub })),
-    })
-}
+import { makePrincipal } from './fixtures'
+import { mountApp, type MountedPage } from './mountPage'
 
 describe('the rail', () => {
     it('has exactly four tabs, and no Recurring', async () => {
-        const pinia = createPinia()
-        const principals = usePrincipalsStore(pinia)
-        principals.principals = [{ id: 7, type: 'user', name: 'Maya Fischer', user_id: 3, group_id: null }]
-        principals.selectPrincipal(7)
+        const page = await mountApp(App, '/p/7/compose')
 
-        const router = makeRouter()
-        await router.push('/p/7/compose')
-        await router.isReady()
-
-        const wrapper = mountPage(App, pinia, router, hostContext())
-        await flushPromises()
-
-        const tabs = wrapper.findAll('nav a')
+        const tabs = page.wrapper.findAll('nav a')
         expect(tabs).toHaveLength(4)
         expect(tabs.map((tab) => tab.text())).toEqual([
             'Compose',
@@ -38,96 +17,71 @@ describe('the rail', () => {
             'Accounts',
         ])
         // The static slot was cut, and the tab that showed it with it.
-        expect(wrapper.find('[data-test="nav-recurring"]').exists()).toBe(false)
-        expect(wrapper.text()).not.toContain('Recurring')
+        expect(page.wrapper.find('[data-test="nav-recurring"]').exists()).toBe(false)
+        expect(page.wrapper.text()).not.toContain('Recurring')
     })
 
     it('canonicalises a stale recurring link rather than blanking it', async () => {
-        const pinia = createPinia()
-        const principals = usePrincipalsStore(pinia)
-        principals.principals = [{ id: 7, type: 'user', name: 'Maya Fischer', user_id: 3, group_id: null }]
-        principals.selectPrincipal(7)
-
-        const router = makeRouter()
-        await router.push('/p/7/recurring')
-        await router.isReady()
-
-        mountPage(App, pinia, router, hostContext())
-        await flushPromises()
+        const page = await mountApp(App, '/p/7/recurring')
 
         // The tab is gone, so the link has to land on a real section rather
         // than on an empty screen.
-        expect(router.currentRoute.value.path).toBe('/p/7/compose')
-        expect(router.currentRoute.value.name).toBe('compose')
-    })
-
-    it('leads the backend’s connections link to the accounts screen', async () => {
-        const pinia = createPinia()
-        const principals = usePrincipalsStore(pinia)
-        principals.principals = [{ id: 7, type: 'user', name: 'Maya Fischer', user_id: 3, group_id: null }]
-        principals.selectPrincipal(7)
-
-        const router = makeRouter()
-        // The OAuth callback redirects the browser here.
-        await router.push('/p/7/connections?connected=meta')
-        await router.isReady()
-
-        mountPage(App, pinia, router, hostContext())
-        await flushPromises()
-
-        // The screen's own address is `/accounts`.
-        expect(router.currentRoute.value.path).toBe('/p/7/accounts')
-    })
-
-    it('announces the provider the callback connected, and drops the query', async () => {
-        const pinia = createPinia()
-        const principals = usePrincipalsStore(pinia)
-        principals.principals = [{ id: 7, type: 'user', name: 'Maya Fischer', user_id: 3, group_id: null }]
-        principals.selectPrincipal(7)
-
-        const router = makeRouter()
-        // The OAuth callback redirects the browser here.
-        await router.push('/p/7/connections?connected=meta')
-        await router.isReady()
-
-        const wrapper = mountPage(App, pinia, router, hostContext())
-        await flushPromises()
-
-        expect(wrapper.find('[data-test="connected-notice"]').text()).toBe('Meta is connected.')
-        // The query has said what it had to say: a reload must not repeat it.
-        expect(router.currentRoute.value.query.connected).toBeUndefined()
+        expect(page.router.currentRoute.value.path).toBe('/p/7/compose')
+        expect(page.router.currentRoute.value.name).toBe('compose')
     })
 
     it('announces nothing when the query names no provider', async () => {
-        const pinia = createPinia()
-        const principals = usePrincipalsStore(pinia)
-        principals.principals = [{ id: 7, type: 'user', name: 'Maya Fischer', user_id: 3, group_id: null }]
-        principals.selectPrincipal(7)
-
-        const router = makeRouter()
-        await router.push('/p/7/connections?connected=facebook')
-        await router.isReady()
-
-        const wrapper = mountPage(App, pinia, router, hostContext())
-        await flushPromises()
+        const page = await mountApp(App, '/p/7/connections?connected=facebook')
 
         // A notice about a connection that does not exist is worse than none.
-        expect(wrapper.find('[data-test="connected-notice"]').exists()).toBe(false)
+        expect(page.wrapper.find('[data-test="connected-notice"]').exists()).toBe(false)
     })
 
     it('announces nothing on a reload, because the query is gone', async () => {
-        const pinia = createPinia()
-        const principals = usePrincipalsStore(pinia)
-        principals.principals = [{ id: 7, type: 'user', name: 'Maya Fischer', user_id: 3, group_id: null }]
-        principals.selectPrincipal(7)
+        const page = await mountApp(App, '/p/7/accounts')
 
-        const router = makeRouter()
-        await router.push('/p/7/accounts')
-        await router.isReady()
+        expect(page.wrapper.find('[data-test="connected-notice"]').exists()).toBe(false)
+    })
 
-        const wrapper = mountPage(App, pinia, router, hostContext())
+    it('adopts the principal the URL names', async () => {
+        // The URL is the only writer of the acting principal, so a URL that
+        // names another one has to win over the store.
+        const page = await mountApp(App, '/p/8/compose', {
+            principals: [
+                makePrincipal({ id: 7 }),
+                makePrincipal({ id: 8, type: 'group', name: 'Studio', user_id: null, group_id: 2 }),
+            ],
+        })
+
+        expect(page.wrapper.find('[data-test="nav-posts"]').attributes('href')).toBe('/p/8/posts')
+    })
+
+    it('sends the operator to the composer from the new-post button', async () => {
+        const page = await mountApp(App, '/p/7/posts')
+
+        await page.wrapper.find('[data-test="new-post"]').trigger('click')
         await flushPromises()
 
-        expect(wrapper.find('[data-test="connected-notice"]').exists()).toBe(false)
+        expect(page.router.currentRoute.value.path).toBe('/p/7/compose')
+    })
+})
+
+describe('the OAuth callback', () => {
+    let page: MountedPage
+
+    beforeEach(async () => {
+        // The OAuth callback redirects the browser here.
+        page = await mountApp(App, '/p/7/connections?connected=meta')
+    })
+
+    it('leads the backend’s connections link to the accounts screen', () => {
+        // The screen's own address is `/accounts`.
+        expect(page.router.currentRoute.value.path).toBe('/p/7/accounts')
+    })
+
+    it('announces the provider the callback connected, and drops the query', () => {
+        expect(page.wrapper.find('[data-test="connected-notice"]').text()).toBe('Meta is connected.')
+        // The query has said what it had to say: a reload must not repeat it.
+        expect(page.router.currentRoute.value.query.connected).toBeUndefined()
     })
 })

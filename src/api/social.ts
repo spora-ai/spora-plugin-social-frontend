@@ -46,7 +46,7 @@ const BASE = '/plugins/social'
  */
 function readList<T>(result: unknown, what: string): T[] {
     if (!Array.isArray(result)) {
-        throw new Error(`${what} did not answer with a list.`)
+        throw new TypeError(`${what} did not answer with a list.`)
     }
     return result as T[]
 }

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import PostsTable from '../../src/components/PostsTable.vue'
 import { makeMedia, makeMetrics, makePost, makeTarget } from '../fixtures'
-import { mountComponent } from '../mountPage'
+import { mountComponent, stubRoutes } from '../mountPage'
 
 describe('PostsTable', () => {
     it('shows the reach of a measured post', () => {
@@ -205,5 +206,37 @@ describe('PostsTable', () => {
         })
 
         expect(wrapper.find('[data-test="post-agent-hint-88"]').exists()).toBe(false)
+    })
+})
+
+describe('PostsTable — opening a post', () => {
+    /** The table, with a router — the row opens the post's drawer. */
+    function mountTable() {
+        const router = stubRoutes()
+        const wrapper = mountComponent(
+            PostsTable,
+            { posts: [makePost()], principalId: 7 },
+            { router },
+        )
+        return { wrapper, router }
+    }
+
+    it.each([
+        ['a click', 'click'],
+        ['Enter', 'keydown.enter'],
+        ['the space bar', 'keydown.space'],
+    ])('opens the post on %s', async (_how, event) => {
+        const { wrapper, router } = mountTable()
+
+        await wrapper.find('[data-test="post-row-88"]').trigger(event)
+        await flushPromises()
+
+        expect(router.currentRoute.value.path).toBe('/p/7/post/88')
+    })
+
+    it('makes the row reachable with the keyboard', () => {
+        const { wrapper } = mountTable()
+
+        expect(wrapper.find('[data-test="post-row-88"]').attributes('tabindex')).toBe('0')
     })
 })

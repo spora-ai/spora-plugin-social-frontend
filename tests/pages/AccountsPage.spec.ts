@@ -196,3 +196,119 @@ describe('AccountsPage', () => {
         expect(wrapper.find('[data-test="connect-linkedin"]').exists()).toBe(true)
     })
 })
+
+describe('AccountsPage — the connections', () => {
+    /** The page, with a host that answers the connection routes. */
+    async function mountAccounts() {
+        const pinia = createPinia()
+        const router = makeRouter()
+        await router.push('/p/7/accounts')
+        await router.isReady()
+
+        const post = vi.fn().mockResolvedValue({})
+        const del = vi.fn().mockResolvedValue({ deleted: true })
+        const context = contextWith()
+        context.api.post = post as never
+        context.api.delete = del as never
+
+        const wrapper = mountPage(AccountsPage, pinia, router, context)
+        await flushPromises()
+        return { wrapper, post, del }
+    }
+
+    it('refreshes a token that expires', async () => {
+        const { wrapper, post } = await mountAccounts()
+
+        await wrapper.find('[data-test="connection-refresh-2"]').trigger('click')
+        await flushPromises()
+
+        expect(post).toHaveBeenCalledWith('/plugins/social/connections/2/refresh', {
+            principal_id: 7,
+        })
+    })
+
+    it('disconnects a connection', async () => {
+        const { wrapper, del } = await mountAccounts()
+
+        await wrapper.find('[data-test="connection-disconnect-1"]').trigger('click')
+        await flushPromises()
+
+        expect(del).toHaveBeenCalledWith('/plugins/social/connections/1?principal_id=7')
+    })
+
+    it('lists the connections that need a human', async () => {
+        const pinia = createPinia()
+        const router = makeRouter()
+        await router.push('/p/7/accounts')
+        await router.isReady()
+
+        const context = contextWith(CONFIG_PAYLOAD, [
+            { ...CONNECTIONS_PAYLOAD[0], status: 'expired', needs_reconnect: true },
+        ])
+        const wrapper = mountPage(AccountsPage, pinia, router, context)
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="connection-attention-1"]').exists()).toBe(true)
+        expect(wrapper.text()).toContain('This connection will not publish until it is renewed.')
+    })
+
+    it('says so when every connection is healthy', async () => {
+        const pinia = createPinia()
+        const router = makeRouter()
+        await router.push('/p/7/accounts')
+        await router.isReady()
+
+        const wrapper = mountPage(AccountsPage, pinia, router, contextWith())
+        await flushPromises()
+
+        expect(wrapper.text()).toContain('Every connection has a healthy token.')
+    })
+
+    it('reconnects a connection that needs a human', async () => {
+        const pinia = createPinia()
+        const router = makeRouter()
+        await router.push('/p/7/accounts')
+        await router.isReady()
+
+        const post = vi.fn().mockResolvedValue({
+            authorize_url: 'https://example.test/oauth',
+            state: 'signed',
+            expires_at: '',
+        })
+        const context = contextWith(CONFIG_PAYLOAD, [
+            { ...CONNECTIONS_PAYLOAD[0], status: 'expired', needs_reconnect: true },
+        ])
+        context.api.post = post as never
+
+        const wrapper = mountPage(AccountsPage, pinia, router, context)
+        await flushPromises()
+
+        await wrapper.find('[data-test="connection-reconnect-1"]').trigger('click')
+        await flushPromises()
+
+        expect(post).toHaveBeenCalledWith('/plugins/social/connections/connect', {
+            principal_id: 7,
+            provider: 'meta',
+        })
+    })
+})
+
+describe('AccountsPage — without a principal', () => {
+    it('asks for nothing', async () => {
+        const pinia = createPinia()
+        const router = makeRouter()
+        await router.push('/')
+        await router.isReady()
+
+        const get = vi.fn().mockResolvedValue({})
+        const context = hostContext()
+        context.api.get = get as never
+
+        mountPage(AccountsPage, pinia, router, context)
+        await flushPromises()
+
+        // A path without a principal names no scope, so there is nothing to
+        // ask the backend about.
+        expect(get).not.toHaveBeenCalled()
+    })
+})

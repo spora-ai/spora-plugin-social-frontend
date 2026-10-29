@@ -1,0 +1,6 @@
+projectKey=spora-plugin-social-frontend-local
+serverUrl=http://localhost:9000
+serverVersion=26.10.0.133078
+dashboardUrl=http://localhost:9000/dashboard?id=spora-plugin-social-frontend-local
+ceTaskId=e5e6b995-c6c4-4d1b-be57-d7a3bb714953
+ceTaskUrl=http://localhost:9000/api/ce/task?id=e5e6b995-c6c4-4d1b-be57-d7a3bb714953

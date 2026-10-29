@@ -115,6 +115,25 @@ const canPublish = computed(
     () => targetIds.value.length > 0 && (body.value.trim() !== '' || attachments.value.length > 0),
 )
 
+/**
+ * What the composer says once the post was accepted.
+ *
+ * The mode decides what happened, so the mode decides the words: a notice
+ * that read "Draft saved" after a publish would be worse than none.
+ */
+function outcomeNotice(next: 'draft' | 'schedule' | 'now'): string {
+    if (next === 'now') return t('Published')
+    if (next === 'schedule') return t('Scheduled')
+    return t('Draft saved')
+}
+
+/** The submit button's own label — it names what the button will do. */
+const submitLabel = computed(() => {
+    if (mode.value === 'now') return t('Publish now')
+    if (mode.value === 'schedule') return t('Schedule post')
+    return t('Save draft')
+})
+
 function removeAttachment(mediaAssetId: string): void {
     attachments.value = attachments.value.filter((item) => item.media_asset_id !== mediaAssetId)
 }
@@ -196,9 +215,7 @@ async function submit(): Promise<void> {
 
         if (created === null) return
 
-        social.setNotice(
-            mode.value === 'now' ? t('Published') : mode.value === 'schedule' ? t('Scheduled') : t('Draft saved'),
-        )
+        social.setNotice(outcomeNotice(mode.value))
         title.value = ''
         body.value = ''
         platformBodies.value = {}
@@ -389,16 +406,35 @@ async function submit(): Promise<void> {
                     </label>
 
                     <div v-if="mode === 'schedule'" class="grid grid-cols-2 gap-2 pt-1">
-                        <input v-model="date" type="date" class="h-8 rounded-lg border border-border bg-background px-2 text-xs" />
-                        <input v-model="time" type="time" class="h-8 rounded-lg border border-border bg-background px-2 text-xs" />
+                        <div>
+                            <label class="field-label" for="cmp-date">{{ t('Date') }}</label>
+                            <input
+                                id="cmp-date"
+                                v-model="date"
+                                type="date"
+                                class="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs"
+                            />
+                        </div>
+                        <div>
+                            <label class="field-label" for="cmp-time">{{ t('Time') }}</label>
+                            <input
+                                id="cmp-time"
+                                v-model="time"
+                                type="time"
+                                class="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs"
+                            />
+                        </div>
                     </div>
-                    <select
-                        v-if="mode === 'schedule'"
-                        v-model="timezone"
-                        class="h-8 rounded-lg border border-border bg-background px-2 text-xs"
-                    >
-                        <option v-for="zone in TIMEZONES" :key="zone" :value="zone">{{ zone }}</option>
-                    </select>
+                    <div v-if="mode === 'schedule'">
+                        <label class="field-label" for="cmp-timezone">{{ t('Timezone') }}</label>
+                        <select
+                            id="cmp-timezone"
+                            v-model="timezone"
+                            class="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+                        >
+                            <option v-for="zone in TIMEZONES" :key="zone" :value="zone">{{ zone }}</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="flex flex-col gap-2 pt-1">
@@ -415,7 +451,7 @@ async function submit(): Promise<void> {
                         <Send v-if="mode === 'now'" class="h-3.5 w-3.5" />
                         <Calendar v-else-if="mode === 'schedule'" class="h-3.5 w-3.5" />
                         <Sparkles v-else class="h-3.5 w-3.5" />
-                        {{ mode === 'now' ? t('Publish now') : mode === 'schedule' ? t('Schedule post') : t('Save draft') }}
+                        {{ submitLabel }}
                     </button>
                     <p v-if="mode !== 'draft'" class="text-[11px] text-muted-foreground">
                         {{ t('Publishing is irreversible on the target networks. The agent path asks for approval; a direct publish from here does not.') }}

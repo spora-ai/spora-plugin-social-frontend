@@ -37,14 +37,14 @@ const failures = []
 // Reject `this.<name>=` (the `extend: true` wrapper shape). Module-scope
 // `this` is `undefined` under dynamic `import()`, so the assignment
 // throws before any later `window.<name> = SporaApp` can run.
-const badWrapper = new RegExp(`\\bthis\\.${globalName}\\s*=`)
+const badWrapper = new RegExp(String.raw`\bthis\.${globalName}\s*=`)
 if (badWrapper.test(txt)) {
     failures.push(`bundle assigns this.${globalName}= — fails in module scope (dynamic import). Drop \`output.extend: true\` from vite.config.ts.`)
 }
 
 // Anchor the binding to its first occurrence so the later
 // `window.<name> = SporaApp` in src/main.ts can't mask a missing wrapper.
-const bindingRe = new RegExp(`(?:^|;|\\n)\\s*(?:var\\s+${globalName}\\s*=|window\\.${globalName}\\s*=)`, 'm')
+const bindingRe = new RegExp(String.raw`(?:^|;|\n)\s*(?:var\s+${globalName}\s*=|window\.${globalName}\s*=)`, 'm')
 const firstBindingMatch = txt.match(bindingRe)
 if (!firstBindingMatch) {
     failures.push(`bundle does not declare ${globalName} via \`var ${globalName}=\` or \`window.${globalName}=\``)

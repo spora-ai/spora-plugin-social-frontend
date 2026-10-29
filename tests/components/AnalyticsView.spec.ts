@@ -111,4 +111,79 @@ describe('AnalyticsView', () => {
         expect(title).toContain('330 reach')
         expect(title).not.toContain('NaN')
     })
+
+    it('counts a counter nobody reported as no engagement at all', () => {
+        const summary = {
+            ...SUMMARY_PAYLOAD,
+            by_network: [
+                {
+                    platform: 'linkedin',
+                    reach: 1000,
+                    impressions: null,
+                    likes: null,
+                    comments: null,
+                    shares: null,
+                    saves: null,
+                    posts: 1,
+                },
+            ],
+        }
+        const wrapper = mountComponent(AnalyticsView, { summary })
+
+        // A counter nobody reported contributes nothing, the same way a
+        // missing reach does.
+        expect(wrapper.find('[data-test="network-row-linkedin"]').text()).toContain('0')
+    })
+
+    it('states no rate over a counted zero', () => {
+        const summary = {
+            ...SUMMARY_PAYLOAD,
+            by_network: [
+                {
+                    platform: 'linkedin',
+                    reach: 0,
+                    impressions: 0,
+                    likes: 0,
+                    comments: 0,
+                    shares: 0,
+                    saves: 0,
+                    posts: 0,
+                },
+            ],
+        }
+        const wrapper = mountComponent(AnalyticsView, { summary })
+
+        // 0/0 is not a rate.
+        expect(wrapper.find('[data-test="network-row-linkedin"]').text()).toContain('—')
+    })
+
+    it('states a rate of zero when nothing was engaged', () => {
+        const summary = {
+            ...SUMMARY_PAYLOAD,
+            by_network: [
+                {
+                    platform: 'linkedin',
+                    reach: 1000,
+                    impressions: 1000,
+                    likes: 0,
+                    comments: 0,
+                    shares: 0,
+                    saves: 0,
+                    posts: 1,
+                },
+            ],
+        }
+        const wrapper = mountComponent(AnalyticsView, { summary })
+
+        expect(wrapper.find('[data-test="network-row-linkedin"]').text()).toContain('0.0%')
+    })
+
+    it('names the columns of the top posts table', () => {
+        const wrapper = mountComponent(AnalyticsView, { summary: SUMMARY_PAYLOAD })
+
+        // A table without headers is a table a screen reader cannot read.
+        const headers = wrapper.findAll('table th')
+        expect(headers.length).toBeGreaterThan(0)
+        expect(headers.map((header) => header.text())).toContain('Post')
+    })
 })

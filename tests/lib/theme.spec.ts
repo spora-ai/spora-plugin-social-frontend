@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -20,6 +20,10 @@ function sourceFiles(dir: string): string[] {
 beforeEach(() => {
     localStorage.clear()
     document.documentElement.classList.remove('dark')
+})
+
+afterEach(() => {
+    vi.unstubAllGlobals()
 })
 
 describe('the theme', () => {
@@ -123,5 +127,29 @@ describe('the theme', () => {
         expect(hostThemeStore(null)).toBeNull()
         expect(hostThemeStore({})).toBeNull()
         expect(hostThemeStore({ _s: new Map() })).toBeNull()
+        expect(hostThemeStore({ _s: 'not a map' })).toBeNull()
+        expect(hostThemeStore({ _s: new Map([['theme', { isDark: false }]]) })).toBeNull()
+    })
+
+    it('finds the store the host published', () => {
+        const store = { isDark: true, toggle: vi.fn() }
+
+        expect(hostThemeStore({ _s: new Map([['theme', store]]) })).toBe(store)
+    })
+})
+
+describe('the theme without a browser', () => {
+    it('is light when there is no local storage to read', () => {
+        // The plugin runs inside the host's document, but the helper has to
+        // survive a runtime that has none — a server render, a worker.
+        vi.stubGlobal('localStorage', undefined)
+
+        expect(storedTheme()).toBe('light')
+    })
+
+    it('puts no class on a document that does not exist', () => {
+        vi.stubGlobal('document', undefined)
+
+        expect(() => applyThemeClass('dark')).not.toThrow()
     })
 })

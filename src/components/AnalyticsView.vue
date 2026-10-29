@@ -272,6 +272,13 @@ function height(day: AnalyticsPoint): number {
                 <h2 class="mb-3 text-sm font-semibold">{{ t('Top posts') }}</h2>
                 <div class="surface-card overflow-hidden">
                     <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-border bg-muted/40 text-left">
+                                <th class="px-3 py-2 font-medium text-muted-foreground">{{ t('Post') }}</th>
+                                <th class="px-3 py-2 text-right font-medium text-muted-foreground">{{ t('Reach') }}</th>
+                                <th class="px-3 py-2 text-right font-medium text-muted-foreground">{{ t('Likes') }}</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             <tr
                                 v-for="post in topPosts"

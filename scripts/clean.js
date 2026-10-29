@@ -9,9 +9,17 @@ import { rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 
 const targets = ['frontend/main.js', 'frontend/style.css']
-for (const t of targets) {
-    if (existsSync(t)) {
-        await rm(t)
-        console.log(`Removed ${t}`)
-    }
+
+// The removals run together: an `await` inside a `for` loop is the shape the
+// analyser flags (javascript:S9382), and two files need no order.
+const removed = await Promise.all(
+    targets.map(async (target) => {
+        if (!existsSync(target)) return null
+        await rm(target)
+        return target
+    }),
+)
+
+for (const target of removed) {
+    if (target !== null) console.log(`Removed ${target}`)
 }

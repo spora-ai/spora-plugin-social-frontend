@@ -4,13 +4,16 @@
  * `START_LOCATION`, so a test asserts against a page unreachable in the app.
  */
 import { vi } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createPinia, type Pinia } from 'pinia'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import type { Component } from 'vue'
-import type { Pinia } from 'pinia'
 import { APP_ROUTES } from '../src/lib/routes'
 import { HOST_CONTEXT_KEY, type PluginHostContext } from '../src/shims'
 import { setApi } from '../src/api/client'
+import { usePrincipalsStore } from '../src/stores/principals'
+import type { Principal } from '../src/api/principals'
+import { makePrincipal } from './fixtures'
 
 /** Derived from `APP_ROUTES`, so a spec always routes through the app's own table. */
 export function stubRoutes(): Router {
@@ -56,18 +59,67 @@ export function mountPage(
 export function mountComponent(
     component: Component,
     props: Record<string, unknown> = {},
-    options: { pinia?: Pinia; context?: PluginHostContext } = {},
+    options: { pinia?: Pinia; context?: PluginHostContext; router?: Router } = {},
 ): VueWrapper {
     const context = options.context ?? hostContext()
     setApi(context.api)
 
+    const plugins = [
+        ...(options.pinia === undefined ? [] : [options.pinia]),
+        ...(options.router === undefined ? [] : [options.router]),
+    ]
+
     return mount(component, {
         props,
         global: {
-            plugins: options.pinia === undefined ? [] : [options.pinia],
+            plugins,
             provide: { [HOST_CONTEXT_KEY as symbol]: context },
         },
     })
+}
+
+/**
+ * A page mounted the way the app mounts it.
+ *
+ * Every screen in the app scopes itself to a principal, so a test that mounts
+ * one has to name that principal and put the router on a path first —
+ * otherwise the page renders its "pick a principal" state and the assertion
+ * is about the wrong screen.
+ */
+export interface MountedPage {
+    wrapper: VueWrapper
+    router: Router
+    pinia: Pinia
+}
+
+export interface MountOptions {
+    /** The principals the caller may act as. */
+    principals?: Principal[]
+    /** The acting principal. */
+    selected?: number
+    context?: PluginHostContext
+}
+
+export async function mountApp(
+    component: Component,
+    path: string | null = null,
+    options: MountOptions = {},
+): Promise<MountedPage> {
+    const pinia = createPinia()
+    const principals = usePrincipalsStore(pinia)
+    principals.principals = options.principals ?? [makePrincipal()]
+    principals.selectPrincipal(options.selected ?? 7)
+
+    const router = stubRoutes()
+    if (path !== null) {
+        await router.push(path)
+        await router.isReady()
+    }
+
+    const wrapper = mountPage(component, pinia, router, options.context ?? hostContext())
+    await flushPromises()
+
+    return { wrapper, router, pinia }
 }
 
 /**

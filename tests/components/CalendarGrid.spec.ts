@@ -31,7 +31,7 @@ describe('CalendarGrid', () => {
         // The tint came from the fixed slots' cron; with the slot cut there is
         // nothing to tint, and a leftover tint would claim a recurrence the
         // plugin no longer has.
-        expect(wrapper.findAll('[data-recurring="true"]').length).toBe(0)
+        expect(wrapper.findAll('[data-recurring="true"]')).toHaveLength(0)
         expect(wrapper.html()).not.toContain('data-recurring')
     })
 
@@ -56,5 +56,17 @@ describe('CalendarGrid', () => {
         })
 
         expect(wrapper.find('[data-day="2026-11-16"] [data-test="calendar-post-89"]').exists()).toBe(true)
+    })
+
+    it.each([
+        ['the previous month', 'calendar-prev', '2026-11', '2026-10'],
+        ['the next month', 'calendar-next', '2026-11', '2026-12'],
+        ['the month before January', 'calendar-prev', '2026-01', '2025-12'],
+    ])('moves to %s', async (_what, button, month, expected) => {
+        const wrapper = mountComponent(CalendarGrid, { month, posts: [] })
+
+        await wrapper.find(`[data-test="${button}"]`).trigger('click')
+
+        expect(wrapper.emitted('month-change')).toEqual([[expected]])
     })
 })
