@@ -14,12 +14,12 @@ The build is a Vite **library** build in IIFE format: `npm run build` writes `fr
 
 ## What the app does
 
-Five screens, behind a rail, with the principal switcher at the top of the rail:
+Four screens, behind a rail, with the principal switcher at the top of the rail:
 
 - **Compose** — the landing screen. The composer with per-platform character counters, the target account picker, the media strip and the publish/schedule controls, plus the "up next" queue and the accounts that need attention. The schedule control is the one-shot path and is unchanged by the cut of the static slot.
 - **Calendar** — the month grid, with the month's posts on the day they go out.
 - **Posts** — the post list, with the reach column, and — behind a segmented control — **Analytics**, which is a *route* (`/apps/social/p/{pid}/posts/analytics`), not a flag. A post the agent wrote says so, and a scheduled one says that the agent will publish it.
-- **Accounts** — the **connections**, one card per login. A provider is a login, not a network: one Meta login publishes as an Instagram professional account *and* as a Facebook Page, under one token that never expires — so the card names the provider, carries the token's health, and lists the accounts it covers with their platform badges and their report notes. A provider with no connection gets a **Connect Meta** / **Connect LinkedIn** button; a provider that is not configured yet also says what to add and where — the app id, the secret and the configuration id live in **Settings → Plugins**, and so does the redirect URI to register with the platform.
+- **Accounts** — the **connections**, one card per login. A provider is a login, not a network: one Meta login publishes as an Instagram professional account *and* as a Facebook Page, under one token — so the card names the provider, carries the token's health, and lists the accounts it covers with their platform badges and their report notes. A provider with no connection gets a **Connect Meta** / **Connect LinkedIn** button; a provider that is not configured yet also says what to add and where — the app id, the secret and the configuration id live in **Settings → Plugins**, and so does the redirect URI to register with the platform.
 
 There is **no Recurring tab**. The static slot — a fixed slot that posted the same words every week — was cut: its template only knew date and time variables, and LinkedIn and Meta ship native scheduled posts anyway. The agent-driven mode replaced it: core's scheduler wakes an agent, the agent drafts the copy, and the post it creates is a scheduled post like any other — so the recurrence itself lives in the agent's own Schedules tab.
 
@@ -90,7 +90,7 @@ These are the extractor's `EXCLUDED_TERMS` — it leaves them in the template as
 
 ## Connections, not platforms
 
-The plugin holds **one OAuth connection per provider**, not one per platform. A Meta connection covers an Instagram professional account *and* a Facebook Page under one token that never expires; a LinkedIn connection covers a member and the organisations they administer.
+The plugin holds **one OAuth connection per provider**, not one per platform. A Meta connection covers an Instagram professional account *and* a Facebook Page under one token; a LinkedIn connection covers a member and the organisations they administer.
 
 So the Accounts screen shows connections: the token's expiry, its status and the "needs reconnect" flag belong to the connection, and each account carries only what is its own — its platform, its name, its audience and the note that says whether it can report numbers at all. The composer's picker still picks **accounts**, so they are flattened out of their connections where it needs them.
 

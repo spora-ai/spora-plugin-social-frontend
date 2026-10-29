@@ -53,7 +53,7 @@ export function makeConnection(overrides: Partial<SocialConnection> = {}): Socia
         provider: 'meta',
         business_external_id: '123456',
         config_id: '9876',
-        // A Meta token never expires.
+        // The platform sent no expiry.
         expires_at: null,
         status: 'active',
         needs_reconnect: false,

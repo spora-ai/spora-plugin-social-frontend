@@ -3,8 +3,8 @@
  * The composer page — the landing screen, because writing is the plugin's
  * primary verb.
  *
- * The rail below the composer answers two questions without leaving the page:
- * what is already queued, and what needs a human.
+ * The two cards below the composer answer two questions without leaving the
+ * page: what is already queued, and what needs a human.
  */
 import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

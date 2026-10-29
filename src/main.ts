@@ -94,7 +94,7 @@ const SporaApp: MountContract = {
         // Read once at mount — what a palette hit, a reload or a pasted link looks like. `isReady()`
         // matters as much as the `replace`: `App.vue` canonicalises the acting principal on its *own*
         // mount, so a path still at `START_LOCATION` would replace away the view the URL asked for.
-        // The query travels too, or `/p/7/accounts?connected=facebook` reloads without the notice.
+        // The query travels too, or `/p/7/accounts?connected=meta` reloads without the notice.
         const hostRoute = hostRouter?.currentRoute?.value ?? null
         const initial = localPathForHostRoute(hostRoute, appSlug)
         if (initial !== null) {
@@ -120,7 +120,7 @@ const SporaApp: MountContract = {
             router.afterEach((to, _from, failure) => {
                 if (disposed || failure) return
                 // `to.fullPath`, not `to.path`: the OAuth callback comes back with
-                // `?connected={platform}`, and the notice reads it from the URL.
+                // `?connected={provider}`, and the notice reads it from the URL.
                 const hostPath = hostPathForLocalPath(to.fullPath, appSlug)
                 const current = hostRouter.currentRoute?.value
                 const currentHostPath = current?.fullPath ?? current?.path

@@ -4,10 +4,10 @@
  *
  * **The screen shows connections rather than platforms** because that is what
  * the operator holds: a Meta login publishes as an Instagram professional
- * account *and* as a Facebook Page, under one token that never expires. The
- * token's health belongs to the connection, not to the accounts inside it — so
- * the expiry, the status and the "needs reconnect" flag sit on the connection's
- * card, and an account carries only what is its own.
+ * account *and* as a Facebook Page, under one token. The token's health
+ * belongs to the connection, not to the accounts inside it — so the expiry,
+ * the status and the "needs reconnect" flag sit on the connection's card, and
+ * an account carries only what is its own.
  *
  * **The setup instruction does not live here.** The app id, the secret and
  * the configuration id are configured in Settings → Plugins, and the redirect
@@ -138,11 +138,11 @@ function setupNotice(provider: Provider): ProviderSetupNotice | null {
                 </div>
 
                 <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
-                    <!-- A token that does not expire has nothing to renew: the
-                         backend hands it back unchanged. A button that cannot do
-                         anything reads as a broken one. The rule is the expiry,
-                         not the provider — a Meta token never expires, and a
-                         LinkedIn one does. -->
+                    <!-- A connection with no expiry has nothing to renew:
+                         the backend hands the token back unchanged. A button
+                         that cannot do anything reads as a broken one. The
+                         rule is the expiry the platform sent — null when it
+                         sent none — and not the provider. -->
                     <button
                         v-if="connection.expires_at !== null"
                         type="button"

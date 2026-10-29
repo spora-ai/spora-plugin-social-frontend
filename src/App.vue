@@ -19,6 +19,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { CalendarDays, List, PenLine, Plus, Users } from 'lucide-vue-next'
 import PrincipalSwitcher from './components/PrincipalSwitcher.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
+import { useConnectedNotice } from './composables/useConnectedNotice'
 import { usePrincipalsStore } from './stores/principals'
 import { useSocialStore } from './stores/social'
 import { canonicalLocalPath, principalIdInLocalPath } from './lib/hostRoute'
@@ -37,6 +38,9 @@ const social = useSocialStore()
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
+
+/** The notice the OAuth callback leaves behind — see the composable. */
+const { notice: connectedNotice, announce: announceConnected } = useConnectedNotice()
 
 const TABS: { key: RailSection; label: string; hint: string; icon: Component }[] = [
     { key: 'compose', label: t('Compose'), hint: t('Write a post and send it anywhere'), icon: PenLine },
@@ -65,7 +69,7 @@ const principalNotice = ref<string | null>(null)
  * store. An inaccessible one falls back to the default *and* has its path
  * rewritten; a principal-less path is canonicalised too.
  */
-function reconcilePrincipal(): void {
+async function reconcilePrincipal(): Promise<void> {
     const named = pathPrincipalId.value
     const resolved = principals.isVisible(named) ? named : principals.defaultPrincipalId()
 
@@ -84,15 +88,18 @@ function reconcilePrincipal(): void {
     const canonical = canonicalLocalPath(route.path, route.name, resolved)
     if (canonical !== null && canonical !== route.path) {
         // The query travels: the OAuth callback comes back with
-        // `?connected={platform}`, and the notice reads it from the URL.
-        void router.replace({ path: canonical, query: route.query }).catch(() => {})
+        // `?connected={provider}`, and the notice reads it from the URL.
+        await router.replace({ path: canonical, query: route.query }).catch(() => {})
     }
 }
 
 onMounted(async () => {
     // The principal list first: nothing below can resolve an acting principal until it answers.
     await principals.ensureLoaded()
-    reconcilePrincipal()
+    await reconcilePrincipal()
+    // The callback's query is read after the URL is canonical, so the notice
+    // and the address bar name the same screen.
+    await announceConnected()
     // The rules every screen reads travel with the config, and the composer
     // needs them before it can count a body.
     await social.loadConfig()
@@ -103,7 +110,7 @@ onMounted(async () => {
 // into the host path via `main.ts`, so this converges rather than ping-pongs. The notice is *not*
 // cleared — a path change is often this very handler raising it.
 watch(pathPrincipalId, () => {
-    reconcilePrincipal()
+    void reconcilePrincipal()
 })
 
 // The accounts belong to the principal, so a scope change re-reads them.
@@ -146,6 +153,14 @@ async function newPost(): Promise<void> {
             data-test="principal-notice"
         >
             {{ principalNotice }}
+        </div>
+
+        <div
+            v-if="connectedNotice"
+            class="border-b border-border bg-emerald-50 px-4 py-2 text-xs text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+            data-test="connected-notice"
+        >
+            {{ connectedNotice }}
         </div>
 
         <div

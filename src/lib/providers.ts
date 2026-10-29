@@ -25,9 +25,9 @@ export function providerLabel(provider: Provider): string {
 /**
  * The connection's token, in the operator's terms.
  *
- * A null expiry is not a missing value: a Meta token "defaults to never
- * expire", and saying so is the difference between a connection that looks
- * broken and one that is fine.
+ * A null expiry is not a missing value: the platform sent none, so there is
+ * no renewal to schedule — and saying so is the difference between a
+ * connection that looks broken and one that is fine.
  */
 export function connectionExpiryNote(connection: SocialConnection, now: number = Date.now()): string {
     if (connection.expires_at === null) return t('Never expires')

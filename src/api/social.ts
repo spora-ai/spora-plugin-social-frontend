@@ -3,8 +3,8 @@
  *
  * Every route lives under `/api/v1/plugins/social` — the host's client owns
  * the `/api/v1` base, so the paths here start at `/plugins/social`. The
- * contract is the one in `spora-workspace/plans/spora-plugin-social.md →
- * API contract`; the paths below are literal.
+ * contract is the plugin's own controllers and resources in
+ * `spora-plugin-social/src/Http`; the paths below are literal.
  *
  * **The principal is always explicit.** It arrives as `principal_id` in the
  * query for reads and in the body for writes. A request without one is a 422

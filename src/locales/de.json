@@ -150,5 +150,6 @@
   "{n}% of the summed reach": "{n}% der summierten Reichweite",
   "{n}d ago": "vor {n}T",
   "{n}h ago": "vor {n}Std.",
-  "{n}m ago": "vor {n}Min."
+  "{n}m ago": "vor {n}Min.",
+  "{provider} is connected.": "{provider} ist verbunden."
 }

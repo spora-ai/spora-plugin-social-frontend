@@ -1,8 +1,10 @@
 /**
  * The post's status, as a colour and as words.
  *
- * The status is derived from the post's targets, never set independently: a
- * post is published when every target published it and partial when some did.
+ * The backend writes the status itself — `draft`, `scheduled`, `publishing`
+ * and `failed` are its own — and only the *outcome* of a publish is derived
+ * from the targets: published when every target published it, partial when
+ * some did.
  */
 import { t } from '../i18n'
 import type { SocialPost } from '../types'

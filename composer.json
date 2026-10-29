@@ -1,6 +1,6 @@
 {
     "name": "spora-ai/spora-plugin-social-frontend",
-    "description": "Pre-built Vue SPA for the Spora social publishing app — compose, calendar, posts, accounts and recurring slots for LinkedIn, Facebook and Instagram. Delivered as type `spora-plugin-frontend`; the host SPA lazy-loads it via /plugins/social/main.js (the parent plugin's `plugin.json#slug`, not this package's name).",
+    "description": "Pre-built Vue SPA for the Spora social publishing app — compose, calendar, posts and accounts, publishing to LinkedIn, Facebook and Instagram. Delivered as type `spora-plugin-frontend`; the host SPA lazy-loads it via /plugins/social/main.js (the parent plugin's `plugin.json#slug`, not this package's name).",
     "type": "spora-plugin-frontend",
     "license": "MIT",
     "require": {

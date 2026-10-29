@@ -2,8 +2,8 @@
  * How a moment in time is put into words.
  *
  * One module, so the same duration is phrased the same way wherever it
- * appears — the post list, the calendar and the account grid all read from
- * here. The page used to carry a ladder of its own, which
+ * appears — the post list, the calendar and the connections grid all read
+ * from here. The page used to carry a ladder of its own, which
  * phrased the same duration differently on the same screen.
  *
  * The strings go through the catalogue: they are operator-facing copy, and a

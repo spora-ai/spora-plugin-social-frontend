@@ -1,10 +1,10 @@
 /**
  * The wire shapes of the social plugin's REST surface.
  *
- * Every type here mirrors the contract in
- * `spora-workspace/plans/spora-plugin-social.md → API contract`, field for
- * field. A field the plugin reads but the contract does not name is flagged
- * in the docblock where it appears.
+ * Every type here mirrors the plugin's own resources — `SocialConnectionResource`
+ * and `SocialPostResource` in `spora-plugin-social/src/Http` — field for
+ * field. Those are what actually answers; a plan file is a design that may
+ * still move.
  */
 
 export type Platform = 'linkedin' | 'facebook' | 'instagram'
@@ -45,9 +45,8 @@ export interface SocialAccount {
  * The OAuth side of the plugin: one provider, one token, many accounts.
  *
  * A connection is what a platform calls a login. Meta's login covers the
- * Instagram professional account *and* the Facebook Page under one token that
- * never expires; LinkedIn's covers a member and the organisations they
- * administer.
+ * Instagram professional account *and* the Facebook Page under one token;
+ * LinkedIn's covers a member and the organisations they administer.
  */
 export type Provider = 'meta' | 'linkedin'
 
@@ -61,7 +60,7 @@ export interface SocialConnection {
     business_external_id: string | null
     /** Meta's configuration id; null where the platform has none. */
     config_id: string | null
-    /** Null where the token does not expire: a Meta token never expires. */
+    /** Null when the platform sent no expiry — the token may still have one. */
     expires_at: string | null
     status: ConnectionStatus
     /** The token has to be renewed before a publish will work. */
