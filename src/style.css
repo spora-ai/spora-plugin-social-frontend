@@ -1,0 +1,416 @@
+/**
+ * Tailwind v4 entry point for the Social plugin.
+ *
+ * Mirrors `spora-frontend/src/style.css` in shape (CSS-first config, no
+ * `content` glob, no `preflight` key) but deliberately deviates in two
+ * places, both because this bundle is injected into a host document rather
+ * than owning one:
+ *
+ * 1. **No preflight.** `@import "tailwindcss"` would pull in Tailwind's
+ *    CSS reset. The host SPA already applies its own reset, and preflight's
+ *    unlayered `*, ::before, ::after { margin: 0; padding: 0; border: 0
+ *    solid }` would cascade straight into the host document and wreck every
+ *    surface outside the plugin slot. So we import only the two halves we
+ *    need — the theme variables and the utility generator — and never
+ *    `tailwindcss/preflight.css`. `scripts/smoke.js` asserts the reset never
+ *    reaches `frontend/style.css`.
+ *
+ * 2. **Utilities are imported UNLAYERED (no `layer(utilities)`).**
+ *    Unlayered rules always beat layered ones, which keeps the plugin's
+ *    utilities above any `@layer components` rule a shared package ships —
+ *    and it reproduces v3's cascade exactly.
+ *
+ * Every generated utility is scoped under the plugin's mount slot by
+ * `tailwind.config.ts → important: '#spora-plugin-social'`, wired in through
+ * the `@config` directive below (v4's supported way to keep a JS option that
+ * has no CSS equivalent).
+ */
+
+/**
+ * The two halves of Tailwind this plugin needs, imported separately.
+ * This is deliberately NOT `@import "tailwindcss"`, which is
+ * `theme + preflight + utilities` — preflight must stay out, because
+ * its reset would cascade into the host document (see the header).
+ *
+ * They sit above every other at-rule on purpose. CSS requires all
+ * `@import` to precede any rule that isn't a `@charset` or a `@layer`
+ * statement, so trailing them after `@config` / `@source` produced an
+ * invalid stylesheet (Sonar `css:S8778`) that only happened to work
+ * because Tailwind's build step re-orders the at-rules itself.
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css";
+
+/**
+ * `important` is the one v3 option with no CSS-native v4 equivalent, so it
+ * stays in `tailwind.config.ts` and is pulled in here. Everything else this
+ * file configures lives in CSS.
+ */
+@config "../tailwind.config.ts";
+
+/**
+ * Content sources. v4 auto-detects, but auto-detection is *additive* and
+ * walks the whole git-tracked tree, which is wrong for a library build in
+ * two ways:
+ *
+ *  - It picks up prose. `.github/workflows/ci.yml` contains the ordinary
+ *    English words "contents" and "invisible", so the build was emitting
+ *    `.contents { display: contents }` and `.invisible { visibility: hidden }`
+ *    for a plugin that uses neither. v3's explicit `content` glob never did
+ *    this.
+ *  - `source(none)` — the flag that would switch auto-detection off
+ *    cleanly — is **incompatible** with the selector-scoped `important` set
+ *    in `tailwind.config.ts`. With `source(none)` the emitted rules silently
+ *    lose the `#spora-plugin-social` prefix and ship as bare `.flex { … }`,
+ *    which would leak straight into the host SPA. So we must keep
+ *    auto-detection on and subtract from it instead.
+ *
+ * `@source not` below re-establishes the v3 `content` glob. The paths are
+ * relative to this file. Note `frontend/` is excluded: it holds the
+ * previous build's `main.js`/`style.css`, and scanning those would make the
+ * build feed on its own output.
+ */
+@source "../index.html";
+@source "../src/**/*.{vue,js,ts,jsx,tsx}";
+@source not "../.github";
+@source not "../coverage";
+@source not "../frontend";
+@source not "../scripts";
+@source not "../tests";
+
+/**
+ * `dark:` must follow the host's `<html class="dark">` toggle, not the
+ * operating system's colour preference — v4's default is the media query,
+ * which would fire dark utilities even after the operator switched the host
+ * SPA to light. Mirrors `spora-frontend/src/style.css`.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/**
+ * Design tokens, ported from the host SPA's `src/style.css`. They resolve
+ * to the *host* SPA's CSS variables so the plugin renders in the same
+ * design language as the gallery, memories and typst surfaces without a
+ * per-plugin palette to keep in sync.
+ *
+ * v4 `@theme` merges with (rather than replaces) the default theme, so the
+ * stock palette from `tailwindcss/theme.css` — `--color-red-500` and
+ * friends — stays available.
+ *
+ * **`--color-card` is the host's own mapping, copied verbatim.** There is
+ * no `--card` token: `spora-frontend/src/style.css` maps
+ * `--color-card: hsl(var(--background))`, i.e. in this design system a card
+ * *is* the page background, separated by `border-border` and a radius.
+ *
+ * The chart and platform colours are the plugin's own: the host does not
+ * publish them, so they are declared below on the plugin root and mirrored
+ * into the theme here.
+ */
+@theme {
+    --font-sans: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+    --color-border: hsl(var(--border));
+    --color-input: hsl(var(--input));
+    --color-ring: hsl(var(--ring));
+    --color-background: hsl(var(--background));
+    --color-foreground: hsl(var(--foreground));
+    --color-primary: hsl(var(--primary));
+    --color-primary-foreground: hsl(var(--primary-foreground));
+    --color-secondary: hsl(var(--secondary));
+    --color-secondary-foreground: hsl(var(--secondary-foreground));
+    --color-destructive: hsl(var(--destructive));
+    --color-destructive-foreground: hsl(var(--destructive-foreground));
+    --color-muted: hsl(var(--muted));
+    --color-muted-foreground: hsl(var(--muted-foreground));
+    --color-accent: hsl(var(--accent));
+    --color-accent-foreground: hsl(var(--accent-foreground));
+    --color-card: hsl(var(--background));
+    --color-card-foreground: hsl(var(--foreground));
+
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+}
+
+/**
+ * The plugin's own colour tokens, declared on the plugin root.
+ *
+ * They are scoped to the plugin's mount slot on purpose: the host injects
+ * this stylesheet into `document.head` as a plain `<link rel="stylesheet">`,
+ * so an unscoped `:root` block would restyle the host SPA's own surfaces.
+ *
+ * **The chart series are deliberately NOT the platform brand hues.**
+ * LinkedIn's and Facebook's blues are close enough to be indistinguishable
+ * in a stacked bar, so the series get their own set. The legend swatch uses
+ * these too, or it would not match the bar it labels.
+ *
+ * The platform hues are chip accents only — never a filled surface, and
+ * never a chart series.
+ */
+#spora-plugin-social {
+    --platform-linkedin: 210 100% 40%;
+    --platform-facebook: 214 89% 52%;
+    --platform-instagram: 348 78% 57%;
+
+    --chart-linkedin: 212 92% 44%;
+    --chart-facebook: 174 68% 36%;
+    --chart-instagram: 332 76% 56%;
+
+    --status-draft: 240 5% 65%;
+    --status-scheduled: 258 90% 60%;
+    --status-publishing: 217 91% 60%;
+    --status-published: 142 71% 45%;
+    --status-partial: 38 92% 50%;
+    --status-cancelled: 240 5% 65%;
+
+    /* The generic status ramp. The host SPA does not publish these — the
+     * dashboard's KPI card says so in a comment — so the plugin carries its
+     * own copy rather than reading a token that resolves to nothing. */
+    --status-failed: 0 84% 60%;
+    --status-awaiting: 38 92% 50%;
+
+    /* The provider chips name a login, not a network, so they carry their
+     * own hues rather than the platform ones. They are darker than the
+     * platform hues on purpose: the chip's text is 11px on a 12% tint of
+     * the same hue, and the platform hues do not clear the 4.5:1 contrast
+     * a small label needs. */
+    --provider-meta: 214 89% 38%;
+    --provider-linkedin: 210 100% 32%;
+
+    /* Global plugin chrome. Scoped to the plugin's mount slot — the host
+     * SPA's styles are not affected because Tailwind's preflight is not
+     * imported at all, and every generated utility is scoped by
+     * `important: '#spora-plugin-social'`.
+     *
+     * No `color` / `background` on the root: the plugin root spans the
+     * page, so painting a fill on it would repaint the host's `body`.
+     * Every *card* inside it carries its own surface instead —
+     * `surface-card` below, which is the same `hsl(var(--background))` the
+     * host paints `body` with. */
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.dark #spora-plugin-social {
+    --platform-linkedin: 210 100% 60%;
+    --platform-facebook: 214 89% 65%;
+    --platform-instagram: 348 78% 65%;
+
+    --chart-linkedin: 212 92% 62%;
+    --chart-facebook: 174 68% 48%;
+    --chart-instagram: 332 76% 66%;
+
+    --status-draft: 240 5% 65%;
+    --status-scheduled: 258 90% 70%;
+    --status-publishing: 217 91% 65%;
+    --status-published: 142 71% 55%;
+    --status-partial: 38 92% 60%;
+    --status-cancelled: 240 5% 65%;
+
+    --status-failed: 0 72% 55%;
+    --status-awaiting: 38 92% 65%;
+
+    /* The provider hues invert with the theme: the chip's text has to be
+     * lighter than the surface it sits on, and the surface is near-black
+     * here. */
+    --provider-meta: 214 89% 72%;
+    --provider-linkedin: 210 100% 68%;
+}
+
+/**
+ * The chart and platform colours, exposed as Tailwind utilities so the
+ * markup can name them (`bg-chart-linkedin`) instead of hand-writing an
+ * inline `style` for every swatch — and so a colour that the host theme
+ * changes is picked up from one place.
+ */
+@theme inline {
+    --color-chart-linkedin: hsl(var(--chart-linkedin));
+    --color-chart-facebook: hsl(var(--chart-facebook));
+    --color-chart-instagram: hsl(var(--chart-instagram));
+    --color-platform-linkedin: hsl(var(--platform-linkedin));
+    --color-platform-facebook: hsl(var(--platform-facebook));
+    --color-platform-instagram: hsl(var(--platform-instagram));
+}
+
+/**
+ * Scrollbar — the muted foreground, so a long rail does not shout.
+ * Hand-written, and therefore scoped by hand: `important` rewrites
+ * *generated* utilities, so a bare `.scroll-quiet` here would publish a
+ * class name into the host document. `scripts/smoke.js` fails the build on
+ * any unscoped utility.
+ */
+#spora-plugin-social .scroll-quiet {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+}
+
+/**
+ * The card surface — the plugin's marker for "this element is a surface".
+ * `bg-card` already resolves to the host's background token; this adds the
+ * hairline and the radius the host's own cards carry.
+ */
+#spora-plugin-social .surface-card {
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+}
+
+/**
+ * The status pill. One shape, one colour table: the lifecycle colours are
+ * the plugin's own tokens, so a post that is "partly published" reads the
+ * same in both themes.
+ */
+#spora-plugin-social .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+#spora-plugin-social .pill-draft { background: hsl(var(--status-draft) / 0.14); color: hsl(var(--status-draft)); }
+#spora-plugin-social .pill-scheduled { background: hsl(var(--status-scheduled) / 0.14); color: hsl(var(--status-scheduled)); }
+#spora-plugin-social .pill-publishing { background: hsl(var(--status-publishing) / 0.14); color: hsl(var(--status-publishing)); }
+#spora-plugin-social .pill-published { background: hsl(var(--status-published) / 0.16); color: hsl(var(--status-published)); }
+#spora-plugin-social .pill-partial { background: hsl(var(--status-partial) / 0.16); color: hsl(38 92% 38%); }
+#spora-plugin-social .pill-failed { background: hsl(var(--status-failed) / 0.12); color: hsl(var(--status-failed)); }
+#spora-plugin-social .pill-cancelled { background: hsl(var(--status-cancelled) / 0.14); color: hsl(var(--muted-foreground)); }
+#spora-plugin-social .pill-neutral { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
+#spora-plugin-social .pill-expiring { background: hsl(var(--status-partial) / 0.16); color: hsl(38 92% 38%); }
+#spora-plugin-social .pill-expired { background: hsl(var(--status-failed) / 0.12); color: hsl(var(--status-failed)); }
+.dark #spora-plugin-social .pill-partial,
+.dark #spora-plugin-social .pill-expiring { color: hsl(38 92% 70%); }
+
+/**
+ * The platform chip. The brand hue is a chip accent only — a tinted capsule
+ * with the brand colour as its text, never a filled brand surface.
+ */
+#spora-plugin-social .platform-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    border-radius: 0.375rem;
+    padding: 0.125rem 0.4375rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+#spora-plugin-social .platform-chip[data-platform="linkedin"] { background: hsl(var(--platform-linkedin) / 0.12); color: hsl(var(--platform-linkedin)); }
+#spora-plugin-social .platform-chip[data-platform="facebook"] { background: hsl(var(--platform-facebook) / 0.12); color: hsl(var(--platform-facebook)); }
+#spora-plugin-social .platform-chip[data-platform="instagram"] { background: hsl(var(--platform-instagram) / 0.12); color: hsl(var(--platform-instagram)); }
+
+/**
+ * The provider chip.
+ *
+ * A provider is a login, not a network: one Meta login covers an Instagram
+ * professional account *and* a Facebook Page, so the chip names the login and
+ * the platform badges below it name the accounts.
+ */
+#spora-plugin-social .provider-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    border-radius: 0.375rem;
+    padding: 0.125rem 0.4375rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+    background: hsl(var(--muted));
+    color: hsl(var(--foreground));
+}
+#spora-plugin-social .provider-chip[data-provider="meta"] {
+    background: hsl(var(--provider-meta) / 0.12);
+    color: hsl(var(--provider-meta));
+}
+#spora-plugin-social .provider-chip[data-provider="linkedin"] {
+    background: hsl(var(--provider-linkedin) / 0.12);
+    color: hsl(var(--provider-linkedin));
+}
+
+/**
+ * A field label above an input — the plugin app uses these throughout.
+ */
+#spora-plugin-social .field-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 0.375rem;
+}
+
+/**
+ * The month grid. The tint on a day says "something repeats here" even on
+ * a day no post has been materialised yet.
+ */
+#spora-plugin-social .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+#spora-plugin-social .cal-cell {
+    min-height: 7.5rem;
+    border-right: 1px solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
+    padding: 0.375rem 0.25rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+}
+#spora-plugin-social .cal-cell:nth-child(7n) { border-right: 0; }
+#spora-plugin-social .cal-cell[data-outside="true"] { background: hsl(var(--muted) / 0.35); }
+#spora-plugin-social .cal-cell[data-today="true"] { background: hsl(var(--status-scheduled) / 0.05); }
+
+/**
+ * A media thumbnail. Real artwork comes from the Media Archive's asset URL;
+ * the tile falls back to the asset's own mime type as its label.
+ */
+#spora-plugin-social .media-thumb {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+}
+#spora-plugin-social .media-thumb::after {
+    content: attr(data-label);
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 0.125rem 0.25rem;
+    font-size: 0.5625rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: hsl(var(--foreground));
+    background: hsl(var(--background) / 0.82);
+    border-top: 1px solid hsl(var(--border));
+}
+
+/**
+ * A textarea that looks like a writing surface rather than a form control.
+ */
+#spora-plugin-social .compose-surface {
+    width: 100%;
+    resize: vertical;
+    min-height: 12rem;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    font: inherit;
+    color: inherit;
+}
+#spora-plugin-social .compose-surface::placeholder { color: hsl(var(--muted-foreground) / 0.75); }
+
+/**
+ * The character counter that turns red past the platform limit.
+ */
+#spora-plugin-social .char-count[data-over="true"] { color: hsl(var(--status-failed)); font-weight: 600; }
+#spora-plugin-social .char-count[data-near="true"] { color: hsl(var(--status-awaiting)); }
