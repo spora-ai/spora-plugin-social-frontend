@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as platforms from '../../src/lib/platforms'
-import { brandColorVar, chartColorVar, charCount, mediaFit } from '../../src/lib/platforms'
+import { brandColorVar, chartColorVar, charCount, composeText, mediaFit, parseHashtags } from '../../src/lib/platforms'
 import { CONFIG_PAYLOAD } from '../recorded'
 
 const rules = CONFIG_PAYLOAD.rules
@@ -102,5 +102,39 @@ describe('lib/platforms', () => {
         const fit = mediaFit({ mime_type: null, size_bytes: 1000 }, rules.instagram!)
 
         expect(fit.fits).toBe(true)
+    })
+})
+
+describe('lib/platforms — the composition', () => {
+    it('leaves the body alone when there are no hashtags', () => {
+        expect(composeText('We shipped…', [])).toBe('We shipped…')
+    })
+
+    it('puts the hashtags under the body', () => {
+        // The mirror of `PlatformFit::composeText()`: the tags go under the
+        // body, separated by a blank line.
+        expect(composeText('We shipped…', ['one', 'two'])).toBe('We shipped…\n\n#one #two')
+    })
+
+    it('puts nothing above the tags when there is no body', () => {
+        expect(composeText('', ['one'])).toBe('#one')
+    })
+
+    it('composes an empty post into nothing', () => {
+        expect(composeText('', [])).toBe('')
+    })
+
+    it('reads the hashtags the way an operator writes them', () => {
+        expect(parseHashtags('#one, #two')).toEqual(['one', 'two'])
+        expect(parseHashtags('one two')).toEqual(['one', 'two'])
+    })
+
+    it('keeps one of each tag', () => {
+        expect(parseHashtags('#one, one #two')).toEqual(['one', 'two'])
+    })
+
+    it('reads no tag out of nothing', () => {
+        expect(parseHashtags('   ')).toEqual([])
+        expect(parseHashtags('#')).toEqual([])
     })
 })

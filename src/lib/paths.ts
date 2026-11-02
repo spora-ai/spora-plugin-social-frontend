@@ -31,6 +31,11 @@ export function composePath(principalId: number): string {
     return `/p/${principalId}/compose`
 }
 
+/** The composer, editing one post — the agent's draft, opened for the operator. */
+export function composePostPath(principalId: number, postId: number): string {
+    return `/p/${principalId}/compose/${postId}`
+}
+
 export function calendarPath(principalId: number): string {
     return `/p/${principalId}/calendar`
 }

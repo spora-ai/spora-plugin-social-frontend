@@ -12,13 +12,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { ExternalLink, RefreshCw, Send, Trash, Trash2, X } from 'lucide-vue-next'
+import { ExternalLink, Pencil, RefreshCw, Send, Trash, Trash2, X } from 'lucide-vue-next'
 import PostsTable from '../components/PostsTable.vue'
 import AnalyticsView from '../components/AnalyticsView.vue'
 import PostImage from '../components/PostImage.vue'
 import { useSocialStore } from '../stores/social'
 import * as socialApi from '../api/social'
-import { analyticsPath, postsPath } from '../lib/paths'
+import { analyticsPath, composePostPath, postsPath } from '../lib/paths'
 import { platformLabel } from '../lib/platforms'
 import { formatDateTime } from '../lib/format'
 import { formatCounter } from '../lib/metrics'
@@ -134,6 +134,16 @@ async function removePost(): Promise<void> {
     if (drawerPost.value === null || principalId.value === null) return
     await social.deletePost(principalId.value, drawerPost.value.id)
     await closeDrawer()
+}
+
+/**
+ * Whether the post's copy can still be changed.
+ *
+ * A draft and a scheduled post have not gone out yet, so their wording can
+ * still be edited. A published post's copy is on the network already.
+ */
+function canEdit(post: SocialPost): boolean {
+    return post.status === 'draft' || post.status === 'scheduled'
 }
 
 /**
@@ -380,6 +390,15 @@ watch(drawerPostId, () => {
                     </dl>
 
                     <div class="flex flex-wrap gap-2 border-t border-border pt-3">
+                        <RouterLink
+                            v-if="principalId !== null && canEdit(drawerPost)"
+                            :to="composePostPath(principalId, drawerPost.id)"
+                            class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
+                            data-test="drawer-edit"
+                        >
+                            <Pencil class="h-3.5 w-3.5" />
+                            {{ t('Edit') }}
+                        </RouterLink>
                         <button
                             type="button"
                             class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"

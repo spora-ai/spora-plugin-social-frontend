@@ -27,6 +27,18 @@ const principalId = computed(() => {
     return Number.isSafeInteger(id) && id > 0 ? id : null
 })
 
+/**
+ * The post being edited — absent on the plain composer.
+ *
+ * The composer is the same screen either way: the post id says which post
+ * the surface is about, and without one it is about a new post.
+ */
+const postId = computed(() => {
+    const raw = route.params.postId
+    const id = Number(raw)
+    return Number.isSafeInteger(id) && id > 0 ? id : undefined
+})
+
 /** The next scheduled posts — the queue the operator can see without a detour. */
 const upNext = computed(() =>
     social.posts
@@ -51,7 +63,11 @@ watch(principalId, async (next, prev) => {
 
 <template>
     <div class="space-y-5" data-test="compose-page">
-        <ComposerPanel v-if="principalId !== null" :principal-id="principalId" />
+        <ComposerPanel
+            v-if="principalId !== null"
+            :principal-id="principalId"
+            :post-id="postId"
+        />
 
         <div class="grid gap-4 lg:grid-cols-2">
             <section class="surface-card p-4">

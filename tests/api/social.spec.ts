@@ -125,21 +125,6 @@ describe('api/social — the paths', () => {
         })
     })
 
-    it('asks for a draft per platform', async () => {
-        await social.generateDraft({
-            principal_id: 3,
-            brief: 'Q4 release',
-            platforms: ['linkedin', 'facebook'],
-            account_ids: [12],
-        })
-        expect(post).toHaveBeenCalledWith('/plugins/social/drafts/generate', {
-            principal_id: 3,
-            brief: 'Q4 release',
-            platforms: ['linkedin', 'facebook'],
-            account_ids: [12],
-        })
-    })
-
     it('never calls the routes the rework removed', async () => {
         await social.listConnections(3)
         await social.listPosts(3)

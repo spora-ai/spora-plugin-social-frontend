@@ -42,6 +42,44 @@ export function charCount(text: string, limit: number): CharCount {
     return { n, limit, over: n > limit, near: n <= limit && n > limit * 0.9 }
 }
 
+/**
+ * The text a post goes out with: its body, and its hashtags under it.
+ *
+ * The mirror of `PlatformFit::composeText()` in the backend, which is the
+ * authority: the backend composes the text it publishes, so a preview that
+ * composed it differently would show the operator something the network
+ * never receives.
+ *
+ * The blank line only appears when there is a body to separate the tags
+ * from — a post that is nothing but tags has no leading empty line.
+ */
+export function composeText(body: string, hashtags: string[]): string {
+    const tags = hashtags.map((hashtag) => `#${hashtag}`)
+    if (tags.length === 0) return body
+
+    const text = tags.join(' ')
+    return body === '' ? text : `${body}\n\n${text}`
+}
+
+/**
+ * The tags an operator typed, as the plain list the backend stores.
+ *
+ * The operator writes them the way they write them in a post — `#one, #two`
+ * or `one two` — and the hashes are added when the post is composed, so
+ * what travels is the tag without them.
+ */
+export function parseHashtags(raw: string): string[] {
+    const tags: string[] = []
+
+    for (const piece of raw.split(/[\s,]+/)) {
+        const tag = piece.replace(/^#+/, '').trim()
+        if (tag === '' || tags.includes(tag)) continue
+        tags.push(tag)
+    }
+
+    return tags
+}
+
 export interface MediaFit {
     fits: boolean
     /** What the network accepts, in its own words. */

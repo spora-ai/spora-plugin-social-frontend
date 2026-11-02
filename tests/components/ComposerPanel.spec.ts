@@ -1,12 +1,18 @@
 import { describe, it, expect, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import ComposerPanel from '../../src/components/ComposerPanel.vue'
+import ComposePage from '../../src/pages/ComposePage.vue'
 import { useSocialStore } from '../../src/stores/social'
-import { makeAccount, makeConnection, makePost } from '../fixtures'
+import { ApiError } from '../../src/api/client'
+import type { AgentSummary } from '../../src/api/agents'
+import { makeAccount, makeConnection, makeMedia, makePost } from '../fixtures'
 import { CONFIG_PAYLOAD } from '../recorded'
-import { hostContext, mountComponent } from '../mountPage'
+import { hostContext, mountComponent, mountPage, stubRoutes } from '../mountPage'
+import { APP_ROUTES } from '../../src/lib/routes'
 import type { PluginHostContext } from '../../src/shims'
+import type { SocialPost } from '../../src/types'
 
 interface Mounted {
     wrapper: ReturnType<typeof mountComponent>
@@ -20,7 +26,7 @@ function asset(id: string, filename: string, mime_type: string) {
 }
 
 /** The composer, with one account to publish to and the backend's rules. */
-function mountComposer(context: PluginHostContext = hostContext()): Mounted {
+function mountComposer(context: PluginHostContext = hostContext(), postId?: number): Mounted {
     const pinia = createPinia()
     const social = useSocialStore(pinia)
     social.connections = [
@@ -28,8 +34,29 @@ function mountComposer(context: PluginHostContext = hostContext()): Mounted {
     ]
     social.config = CONFIG_PAYLOAD
 
-    const wrapper = mountComponent(ComposerPanel, { principalId: 7 }, { pinia, context })
+    const wrapper = mountComponent(
+        ComposerPanel,
+        { principalId: 7, postId },
+        { pinia, context, router: stubRoutes() },
+    )
     return { wrapper, social, context }
+}
+
+/**
+ * The composer, editing a post.
+ *
+ * The post is answered by the API, the way the backend answers it, and the
+ * save is answered too — so the composer's own round trip can be watched.
+ */
+async function mountEditing(post: SocialPost): Promise<Mounted> {
+    const context = hostContext()
+    context.api.get = vi.fn().mockResolvedValue(post) as never
+    context.api.patch = vi.fn().mockResolvedValue(post) as never
+    context.api.post = vi.fn().mockResolvedValue(post) as never
+
+    const mounted = mountComposer(context, post.id)
+    await flushPromises()
+    return mounted
 }
 
 /** The composer, publishing to an Instagram account, with the given media attached. */
@@ -182,63 +209,170 @@ describe('ComposerPanel — the media', () => {
     })
 })
 
-describe('ComposerPanel — the draft', () => {
-    /** The composer, with a backend that answers the draft request. */
-    function mountWithDraft(post: ReturnType<typeof vi.fn>): Mounted {
-        const mounted = mountComposer()
-        mounted.context.api.post = post as never
+describe('ComposerPanel — the agent panel', () => {
+    /** An agent with the tools it runs with. */
+    function agent(id: number, name: string, tools: string[]): AgentSummary {
+        return {
+            id,
+            name,
+            description: null,
+            tools: tools.map((tool_name) => ({ tool_name })),
+        }
+    }
+
+    /** The composer, with the panel open and the principal's agents loaded. */
+    async function mountWithAgents(
+        agents: AgentSummary[],
+        context: PluginHostContext = hostContext(),
+    ): Promise<Mounted> {
+        const mounted = mountComposer(context)
+        mounted.context.api.get = vi.fn().mockResolvedValue({ agents }) as never
+
+        await mounted.wrapper.find('[data-test="draft-with-agent"]').trigger('click')
+        await flushPromises()
         return mounted
     }
 
-    it('fills the body with the draft the backend wrote', async () => {
-        const post = vi.fn().mockResolvedValue({
-            title: 'Q4 release',
-            bodies: { linkedin: 'The Q4 release is out.' },
-            hashtags: [],
-        })
-        const { wrapper } = mountWithDraft(post)
-
-        await wrapper.find('[data-test="target-12"]').setValue(true)
+    /** The panel, with a prompt written and an agent chosen. */
+    async function composeForAgent(
+        wrapper: ReturnType<typeof mountComponent>,
+        agentId: number,
+        prompt = 'A post about our release',
+    ): Promise<void> {
+        await wrapper.find('[data-test="agent-select"]').setValue(String(agentId))
+        await wrapper.find('[data-test="agent-prompt"]').setValue(prompt)
         await flushPromises()
-        await wrapper.find('[data-test="draft-with-ai"]').trigger('click')
-        await flushPromises()
+    }
 
-        expect(post).toHaveBeenCalledWith('/plugins/social/drafts/generate', {
-            principal_id: 7,
-            brief: '',
-            platforms: ['linkedin'],
-            account_ids: [12],
-        })
-        expect((wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe(
-            'The Q4 release is out.',
-        )
+    it('lists the principal’s agents', async () => {
+        const { wrapper, context } = await mountWithAgents([
+            agent(1, 'The writer', ['social_post']),
+            agent(2, 'The reader', ['web_search']),
+        ])
+
+        expect(context.api.get).toHaveBeenCalledWith('/agents', { principal_id: 7 })
+        expect(wrapper.find('[data-test="agent-select"]').text()).toContain('The writer')
+        expect(wrapper.find('[data-test="agent-select"]').text()).toContain('The reader')
     })
 
-    it('keeps the body the operator wrote', async () => {
-        const post = vi.fn().mockResolvedValue({
-            title: 'Q4 release',
-            bodies: { linkedin: 'The Q4 release is out.' },
-            hashtags: [],
-        })
-        const { wrapper } = mountWithDraft(post)
+    it('will not send without a prompt', async () => {
+        const { wrapper } = await mountWithAgents([agent(1, 'The writer', ['social_post'])])
 
-        await compose(wrapper, 'My own words')
-        await wrapper.find('[data-test="draft-with-ai"]').trigger('click')
+        await wrapper.find('[data-test="agent-select"]').setValue('1')
         await flushPromises()
 
-        expect((wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe('My own words')
+        expect(wrapper.find('[data-test="agent-send"]').attributes('disabled')).toBeDefined()
     })
 
-    it('says so when the draft could not be generated', async () => {
-        const post = vi.fn().mockRejectedValue(new Error('boom'))
-        const { wrapper, social } = mountWithDraft(post)
+    it('will not send to an agent without the social_post tool', async () => {
+        const { wrapper } = await mountWithAgents([agent(2, 'The reader', ['web_search'])])
 
-        await wrapper.find('[data-test="target-12"]').setValue(true)
-        await flushPromises()
-        await wrapper.find('[data-test="draft-with-ai"]').trigger('click')
+        await composeForAgent(wrapper, 2)
+
+        expect(wrapper.find('[data-test="agent-send"]').attributes('disabled')).toBeDefined()
+        expect(wrapper.find('[data-test="agent-note"]').text()).toContain('social_post')
+    })
+
+    it('starts a task for the chosen agent', async () => {
+        const post = vi.fn().mockResolvedValue({ task: { id: 42 } })
+        const { wrapper, context, social } = await mountWithAgents([
+            agent(1, 'The writer', ['social_post']),
+        ])
+        context.api.post = post as never
+
+        await composeForAgent(wrapper, 1)
+        await wrapper.find('[data-test="agent-send"]').trigger('click')
         await flushPromises()
 
-        expect(social.notice).toBe('The draft could not be generated.')
+        expect(post).toHaveBeenCalledWith('/tasks', {
+            agent_id: 1,
+            prompt: 'A post about our release',
+        })
+        expect(social.notice).toContain('Posts')
+    })
+
+    it('offers the chat link after the send', async () => {
+        const push = vi.fn().mockResolvedValue(undefined)
+        const context = hostContext({
+            router: { push, currentRoute: { value: { path: '/' } } },
+        })
+        const post = vi.fn().mockResolvedValue({ task: { id: 42 } })
+        const { wrapper } = await mountWithAgents([agent(1, 'The writer', ['social_post'])], context)
+        context.api.post = post as never
+
+        await composeForAgent(wrapper, 1)
+        await wrapper.find('[data-test="agent-send"]').trigger('click')
+        await flushPromises()
+
+        const link = wrapper.find('[data-test="agent-chat-link"]')
+        expect(link.exists()).toBe(true)
+        await link.trigger('click')
+        expect(push).toHaveBeenCalledWith('/tasks/42')
+    })
+
+    it('offers the agent’s tools page when the agent cannot post', async () => {
+        const push = vi.fn().mockResolvedValue(undefined)
+        const context = hostContext({
+            router: { push, currentRoute: { value: { path: '/' } } },
+        })
+        const { wrapper } = await mountWithAgents([agent(2, 'The reader', ['web_search'])], context)
+
+        await composeForAgent(wrapper, 2)
+
+        const link = wrapper.find('[data-test="agent-tools-link"]')
+        expect(link.exists()).toBe(true)
+        await link.trigger('click')
+        expect(push).toHaveBeenCalledWith('/agents/2/tools')
+    })
+
+    it('says what went wrong when the task could not be started', async () => {
+        const post = vi.fn().mockRejectedValue(new ApiError('The agent is busy.', 'busy', 409))
+        const { wrapper, context } = await mountWithAgents([agent(1, 'The writer', ['social_post'])])
+        context.api.post = post as never
+
+        await composeForAgent(wrapper, 1)
+        await wrapper.find('[data-test="agent-send"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="agent-error"]').text()).toBe('The agent is busy.')
+    })
+
+    it('says the failure itself when the request failed for another reason', async () => {
+        const post = vi.fn().mockRejectedValue(new Error('the network is gone'))
+        const { wrapper, context } = await mountWithAgents([agent(1, 'The writer', ['social_post'])])
+        context.api.post = post as never
+
+        await composeForAgent(wrapper, 1)
+        await wrapper.find('[data-test="agent-send"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="agent-error"]').text()).toBe('the network is gone')
+    })
+
+    it('falls back to its own wording when the failure carried no message', async () => {
+        const post = vi.fn().mockRejectedValue('boom')
+        const { wrapper, context } = await mountWithAgents([agent(1, 'The writer', ['social_post'])])
+        context.api.post = post as never
+
+        await composeForAgent(wrapper, 1)
+        await wrapper.find('[data-test="agent-send"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="agent-error"]').text()).toBe('The prompt could not be sent.')
+    })
+
+    it('says so when the agents could not be read', async () => {
+        const mounted = mountComposer()
+        mounted.context.api.get = vi
+            .fn()
+            .mockRejectedValue(new ApiError('The backend is down.', 'down', 503)) as never
+
+        await mounted.wrapper.find('[data-test="draft-with-agent"]').trigger('click')
+        await flushPromises()
+
+        // Not "this principal has no agent" — that would be a claim the read
+        // never made.
+        expect(mounted.wrapper.find('[data-test="agent-note"]').text()).toBe('The backend is down.')
     })
 })
 
@@ -263,6 +397,7 @@ describe('ComposerPanel — the publish', () => {
             title: '',
             body: 'We shipped…',
             platform_bodies: {},
+            hashtags: [],
             account_ids: [12],
             scheduled_for: expect.any(String),
             timezone: 'Europe/Berlin',
@@ -348,5 +483,438 @@ describe('ComposerPanel — the publish', () => {
                 ],
             }),
         )
+    })
+
+    it('keeps the title with the post', async () => {
+        const post = vi.fn().mockResolvedValue(makePost({ id: 88 }))
+        const { wrapper, context } = mountComposer()
+        context.api.post = post as never
+
+        await compose(wrapper)
+        await wrapper.find('#cmp-title').setValue('Q4 release')
+        await flushPromises()
+        await wrapper.find('[data-test="composer-submit"]').trigger('click')
+        await flushPromises()
+
+        expect(post).toHaveBeenCalledWith(
+            '/plugins/social/posts',
+            expect.objectContaining({ title: 'Q4 release' }),
+        )
+    })
+
+    it('sends the moment in the operator’s own clock', async () => {
+        const post = vi.fn().mockResolvedValue(makePost({ id: 88 }))
+        const { wrapper, context } = mountComposer()
+        context.api.post = post as never
+
+        await compose(wrapper)
+        await wrapper.find('#cmp-date').setValue('2026-11-09')
+        await wrapper.find('#cmp-time').setValue('08:30')
+        await wrapper.find('#cmp-timezone').setValue('UTC')
+        await flushPromises()
+        await wrapper.find('[data-test="composer-submit"]').trigger('click')
+        await flushPromises()
+
+        expect(post).toHaveBeenCalledWith(
+            '/plugins/social/posts',
+            expect.objectContaining({
+                scheduled_for: new Date('2026-11-09T08:30:00').toISOString(),
+                timezone: 'UTC',
+            }),
+        )
+    })
+})
+
+describe('ComposerPanel — one body, and a network’s own only where it differs', () => {
+    /** The composer, with two networks to publish to. */
+    function mountTwoNetworks(): Mounted {
+        const mounted = mountComposer()
+        mounted.social.connections = [
+            makeConnection({
+                accounts: [
+                    makeAccount({ id: 12, platform: 'linkedin' }),
+                    makeAccount({ id: 13, platform: 'facebook' }),
+                ],
+            }),
+        ]
+        return mounted
+    }
+
+    /** Choose both networks and write the shared message. */
+    async function writeShared(wrapper: ReturnType<typeof mountComponent>): Promise<void> {
+        await wrapper.find('[data-test="target-12"]').setValue(true)
+        await wrapper.find('[data-test="target-13"]').setValue(true)
+        await wrapper.find('#cmp-body').setValue('We shipped…')
+        await flushPromises()
+    }
+
+    it('edits the shared body, and says so', async () => {
+        const { wrapper } = mountTwoNetworks()
+
+        await writeShared(wrapper)
+
+        expect(wrapper.find('[data-test="message-label"]').text()).toBe('Shared message')
+        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('We shipped…')
+        expect(wrapper.find('[data-test="preview-facebook"]').text()).toContain('We shipped…')
+    })
+
+    it('gives a network a text of its own, and leaves the others the shared one', async () => {
+        const { wrapper } = mountTwoNetworks()
+        await writeShared(wrapper)
+
+        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await flushPromises()
+        await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('The LinkedIn wording.')
+        expect(wrapper.find('[data-test="preview-facebook"]').text()).toContain('We shipped…')
+    })
+
+    it('names the network whose own text the box edits', async () => {
+        const { wrapper } = mountTwoNetworks()
+        await writeShared(wrapper)
+
+        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="message-label"]').text()).toBe('Message for LinkedIn')
+        // The own text starts as the shared one, so it is edited and not written again.
+        expect((wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe('We shipped…')
+    })
+
+    it('goes back to the shared message without dropping the network’s own text', async () => {
+        const { wrapper } = mountTwoNetworks()
+        await writeShared(wrapper)
+
+        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await flushPromises()
+        await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
+        await flushPromises()
+        await wrapper.find('[data-test="back-to-shared"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="message-label"]').text()).toBe('Shared message')
+        expect((wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe('We shipped…')
+        expect(wrapper.find('[data-test="platform-edit-linkedin"]').exists()).toBe(true)
+    })
+
+    it('drops the network’s own text and goes back to the shared message', async () => {
+        const { wrapper } = mountTwoNetworks()
+        await writeShared(wrapper)
+
+        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await flushPromises()
+        await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
+        await flushPromises()
+        await wrapper.find('[data-test="platform-use-shared-linkedin"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="platform-own-text-linkedin"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('We shipped…')
+        expect(wrapper.find('[data-test="preview-linkedin"]').text()).not.toContain('The LinkedIn wording.')
+    })
+
+    it('sends the network’s own text with the post', async () => {
+        const post = vi.fn().mockResolvedValue(makePost({ id: 88 }))
+        const { wrapper, context } = mountTwoNetworks()
+        context.api.post = post as never
+        await writeShared(wrapper)
+
+        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await flushPromises()
+        await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
+        await flushPromises()
+        await wrapper.find('[data-test="composer-submit"]').trigger('click')
+        await flushPromises()
+
+        expect(post).toHaveBeenCalledWith(
+            '/plugins/social/posts',
+            expect.objectContaining({
+                body: 'We shipped…',
+                platform_bodies: { linkedin: 'The LinkedIn wording.' },
+            }),
+        )
+    })
+
+    it('publishes on a network’s own text alone', async () => {
+        const { wrapper } = mountTwoNetworks()
+
+        await wrapper.find('[data-test="target-12"]').setValue(true)
+        await flushPromises()
+        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await flushPromises()
+        await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
+        await flushPromises()
+
+        // The shared body is empty, and the post can still go out.
+        expect(wrapper.find('[data-test="composer-submit"]').attributes('disabled')).toBeUndefined()
+    })
+
+    it('switches the box to the network’s own text', async () => {
+        const { wrapper } = mountTwoNetworks()
+        await writeShared(wrapper)
+
+        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await flushPromises()
+        await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
+        await flushPromises()
+        await wrapper.find('[data-test="back-to-shared"]').trigger('click')
+        await flushPromises()
+
+        await wrapper.find('[data-test="platform-edit-linkedin"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="message-label"]').text()).toBe('Message for LinkedIn')
+        expect((wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe(
+            'The LinkedIn wording.',
+        )
+    })
+})
+
+describe('ComposerPanel — the hashtags', () => {
+    it('sends the tags without their hashes', async () => {
+        const post = vi.fn().mockResolvedValue(makePost({ id: 88 }))
+        const { wrapper, context } = mountComposer()
+        context.api.post = post as never
+
+        await wrapper.find('[data-test="target-12"]').setValue(true)
+        await wrapper.find('#cmp-body').setValue('We shipped…')
+        await wrapper.find('[data-test="hashtags-input"]').setValue('#one, #two')
+        await flushPromises()
+        await wrapper.find('[data-test="composer-submit"]').trigger('click')
+        await flushPromises()
+
+        expect(post).toHaveBeenCalledWith(
+            '/plugins/social/posts',
+            expect.objectContaining({ hashtags: ['one', 'two'] }),
+        )
+    })
+
+    it('counts the tags against the limit, because they go out with the text', async () => {
+        const { wrapper } = mountComposer()
+
+        await wrapper.find('[data-test="target-12"]').setValue(true)
+        await wrapper.find('#cmp-body').setValue('a'.repeat(10))
+        await wrapper.find('[data-test="hashtags-input"]').setValue('#one')
+        await flushPromises()
+
+        // The composed text is the body, a blank line and the tag.
+        expect(wrapper.find('[data-test="preview-linkedin"] .char-count').text()).toBe('16 / 3000')
+    })
+
+    it('shows the tags in the preview, where the counter is', async () => {
+        const { wrapper } = mountComposer()
+
+        await wrapper.find('[data-test="target-12"]').setValue(true)
+        await wrapper.find('[data-test="hashtags-input"]').setValue('#one #two')
+        await flushPromises()
+
+        const preview = wrapper.find('[data-test="preview-linkedin"]')
+        expect(preview.find('[data-test="preview-hashtags"]').text()).toBe('#one #two')
+    })
+
+    it('says how many characters the network shows', async () => {
+        const { wrapper } = mountComposer()
+
+        await wrapper.find('[data-test="target-12"]').setValue(true)
+        await flushPromises()
+
+        // The number is the backend's; the wording around it is the
+        // composer's, so there is one rule and one sentence.
+        expect(
+            wrapper.find('[data-test="preview-linkedin"] [data-test="visible-chars"]').text(),
+        ).toBe('Only the first ~200 characters show.')
+    })
+})
+
+describe('ComposerPanel — editing a post', () => {
+    it('says which post it is editing, and how to get back to a new one', async () => {
+        const { wrapper } = await mountEditing(makePost({ id: 12, status: 'draft' }))
+
+        expect(wrapper.find('[data-test="editing-heading"]').text()).toBe('Editing post #12')
+        expect(wrapper.find('[data-test="back-to-composer"]').attributes('href')).toBe('/p/7/compose')
+    })
+
+    it('refuses to edit a post that has been published', async () => {
+        const { wrapper } = await mountEditing(makePost({ id: 12, status: 'published' }))
+
+        expect(wrapper.find('[data-test="post-load-error"]').text()).toBe(
+            'This post has been published — its copy is on the network.',
+        )
+    })
+
+    it('offers no new draft while a post is being edited', async () => {
+        const { wrapper } = await mountEditing(makePost({ id: 12, status: 'draft' }))
+
+        // The panel starts a NEW post; the operator is editing one.
+        expect(wrapper.find('[data-test="draft-with-agent"]').exists()).toBe(false)
+    })
+
+    it('fills the surface with the post', async () => {
+        const { wrapper } = await mountEditing(
+            makePost({
+                id: 12,
+                status: 'draft',
+                title: 'Q4 release',
+                body: 'We shipped…',
+                platform_bodies: { linkedin: 'The LinkedIn wording.' },
+                hashtags: ['one', 'two'],
+                accounts: [{ id: 12, platform: 'linkedin', display_name: 'Fabeat GmbH' }],
+            }),
+        )
+
+        expect((wrapper.find('#cmp-title').element as HTMLInputElement).value).toBe('Q4 release')
+        expect((wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe('We shipped…')
+        expect((wrapper.find('#cmp-hashtags').element as HTMLInputElement).value).toBe('#one #two')
+        expect(wrapper.find('[data-test="target-summary"]').text()).toBe('1 accounts selected')
+        // The network's own text is what that network publishes.
+        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('The LinkedIn wording.')
+    })
+
+    it('carries the attachments of the post', async () => {
+        const { wrapper } = await mountEditing(
+            makePost({
+                id: 12,
+                status: 'draft',
+                media: [makeMedia({ media_asset_id: 'asset-1', filename: 'chart.png' })],
+            }),
+        )
+
+        expect(wrapper.find('[data-test="media-item-asset-1"]').exists()).toBe(true)
+    })
+
+    it('opens a scheduled post in the schedule, and a draft as a draft', async () => {
+        const scheduled = await mountEditing(
+            makePost({ id: 12, status: 'scheduled', scheduled_for: '2026-11-09T09:00:00+00:00' }),
+        )
+        expect((scheduled.wrapper.find('input[value="schedule"]').element as HTMLInputElement).checked).toBe(
+            true,
+        )
+
+        const draft = await mountEditing(makePost({ id: 13, status: 'draft' }))
+        expect((draft.wrapper.find('input[value="draft"]').element as HTMLInputElement).checked).toBe(true)
+    })
+
+    it('fills the date and the time with the moment the post goes out', async () => {
+        const { wrapper } = await mountEditing(
+            makePost({ id: 12, status: 'scheduled', scheduled_for: '2026-11-09T09:00:00+00:00' }),
+        )
+
+        // The box holds the operator's own wall clock, which is the clock the
+        // composer sends — so the moment is not shifted by opening the post.
+        const when = new Date('2026-11-09T09:00:00+00:00')
+        const local = new Date(when.getTime() - when.getTimezoneOffset() * 60_000)
+        expect((wrapper.find('#cmp-date').element as HTMLInputElement).value).toBe(
+            local.toISOString().slice(0, 10),
+        )
+        expect((wrapper.find('#cmp-time').element as HTMLInputElement).value).toBe(
+            local.toISOString().slice(11, 16),
+        )
+    })
+
+    it('saves the post instead of creating one', async () => {
+        const { wrapper, context } = await mountEditing(makePost({ id: 12, status: 'draft' }))
+
+        await wrapper.find('[data-test="composer-submit"]').trigger('click')
+        await flushPromises()
+
+        expect(context.api.patch).toHaveBeenCalledWith(
+            '/plugins/social/posts/12',
+            expect.objectContaining({ principal_id: 7, body: 'We shipped…' }),
+        )
+        expect(context.api.post).not.toHaveBeenCalled()
+    })
+
+    it('does not publish when it saves', async () => {
+        const { wrapper, context } = await mountEditing(
+            makePost({ id: 12, status: 'scheduled', scheduled_for: '2026-11-09T09:00:00+00:00' }),
+        )
+
+        await wrapper.find('[data-test="composer-submit"]').trigger('click')
+        await flushPromises()
+
+        expect(context.api.patch).toHaveBeenCalled()
+        expect(context.api.post).not.toHaveBeenCalled()
+    })
+
+    it('saves the post and then publishes it when the operator says publish now', async () => {
+        const { wrapper, context } = await mountEditing(makePost({ id: 12, status: 'draft' }))
+
+        await wrapper.find('input[value="now"]').setValue(true)
+        await flushPromises()
+        await wrapper.find('[data-test="composer-submit"]').trigger('click')
+        await flushPromises()
+
+        expect(context.api.patch).toHaveBeenCalled()
+        expect(context.api.post).toHaveBeenCalledWith('/plugins/social/posts/12/publish', {
+            principal_id: 7,
+        })
+    })
+
+    it('says so when the post could not be loaded', async () => {
+        const context = hostContext()
+        context.api.get = vi.fn().mockRejectedValue(
+            new ApiError('Post 12 was not found for this principal.', 'not_found', 404),
+        ) as never
+
+        const mounted = mountComposer(context, 12)
+        await flushPromises()
+
+        expect(mounted.wrapper.find('[data-test="post-load-error"]').text()).toBe(
+            'Post 12 was not found for this principal.',
+        )
+    })
+
+    it('reads the post again when the post id changes', async () => {
+        const { wrapper, context } = await mountEditing(makePost({ id: 12, status: 'draft' }))
+        context.api.get = vi.fn().mockResolvedValue(
+            makePost({ id: 13, status: 'draft', title: 'The other one' }),
+        ) as never
+
+        await wrapper.setProps({ postId: 13 })
+        await flushPromises()
+
+        expect((wrapper.find('#cmp-title').element as HTMLInputElement).value).toBe('The other one')
+    })
+
+    it('empties the surface when the post is left', async () => {
+        const { wrapper } = await mountEditing(
+            makePost({ id: 12, status: 'draft', title: 'Q4 release' }),
+        )
+
+        await wrapper.setProps({ postId: undefined })
+        await flushPromises()
+
+        // The route without a post id is the plain composer: a post left
+        // behind in the surface would be saved again as a new one.
+        expect((wrapper.find('#cmp-title').element as HTMLInputElement).value).toBe('')
+        expect((wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe('')
+        expect(wrapper.find('[data-test="editing-heading"]').exists()).toBe(false)
+    })
+})
+
+describe('ComposerPanel — the route that names the post', () => {
+    it('opens the composer on the post the route names', async () => {
+        const router = createRouter({
+            history: createMemoryHistory(),
+            routes: APP_ROUTES.map(({ path, name }) => ({
+                path,
+                name,
+                component: { template: '<div />' },
+            })),
+        })
+        await router.push('/p/7/compose/88')
+        await router.isReady()
+
+        const context = hostContext()
+        context.api.get = vi.fn().mockResolvedValue(
+            makePost({ id: 88, status: 'draft', title: 'Q4 release' }),
+        ) as never
+
+        const wrapper = mountPage(ComposePage, createPinia(), router, context)
+        await flushPromises()
+
+        expect((wrapper.find('#cmp-title').element as HTMLInputElement).value).toBe('Q4 release')
     })
 })
