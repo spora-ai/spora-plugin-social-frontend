@@ -300,7 +300,20 @@ async function attachMedia(): Promise<void> {
  * looking at a form that is not the one in use.
  */
 const view = ref<'write' | 'agent'>('write')
-const agentPrompt = ref('')
+
+/**
+ * The brief the operator starts from.
+ *
+ * A prompt the operator has to write from nothing is a prompt they will not
+ * write: the brief says what the agent is for and names the tool it writes
+ * the post with, so the first send is one click and the second is a change
+ * to the same brief.
+ */
+const DEFAULT_AGENT_PROMPT = t(
+    'Draft a post for social media and create a draft with the social_post tool.',
+)
+
+const agentPrompt = ref(DEFAULT_AGENT_PROMPT)
 const agents = ref<AgentSummary[]>([])
 const selectedAgentId = ref<number | null>(null)
 /** What went wrong, said in the API's own words. */
@@ -440,9 +453,13 @@ function closeAgentView(): void {
 /**
  * Hand the prompt to the agent.
  *
- * The task is a first-class Spora task: the agent writes the post in its own
- * chat, and the operator watches it there. The plugin neither polls nor reads
- * the answer back — the post lands in Posts when the agent has written it.
+ * The task is a first-class Spora task: the agent runs in its own chat, and
+ * the operator watches it there. The plugin neither polls nor reads the
+ * answer back.
+ *
+ * **What the plugin knows is that the prompt was sent** — not that the agent
+ * is writing a post. Whether it does is the agent's business, and the notice
+ * says what happened.
  */
 async function sendToAgent(): Promise<void> {
     if (drafting.value) return
@@ -457,8 +474,8 @@ async function sendToAgent(): Promise<void> {
             prompt: agentPrompt.value,
         })
         sentTaskId.value = result.task?.id ?? null
-        social.setNotice(t('The agent is writing the post. It appears in Posts when it is done.'))
-        agentPrompt.value = ''
+        social.setNotice(t('Prompt sent'))
+        agentPrompt.value = DEFAULT_AGENT_PROMPT
     } catch (e) {
         agentError.value = failureMessage(e, t('The prompt could not be sent.'))
     } finally {
@@ -720,7 +737,7 @@ async function submit(): Promise<void> {
             </button>
 
             <p v-if="sentTaskId !== null" class="text-xs text-muted-foreground" data-test="agent-sent">
-                {{ t('The agent has the prompt. Watch it write in the task chat.') }}
+                {{ t('The prompt is with the agent. The post appears in Posts when the agent writes one.') }}
                 <button
                     type="button"
                     class="underline disabled:cursor-default disabled:no-underline"
@@ -728,7 +745,7 @@ async function submit(): Promise<void> {
                     data-test="agent-chat-link"
                     @click="goToHost(taskChatLink)"
                 >
-                    {{ t('Open the chat') }}
+                    {{ t('See progress here') }}
                 </button>
             </p>
         </div>

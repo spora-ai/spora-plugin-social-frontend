@@ -282,10 +282,24 @@ describe('ComposerPanel — the agent panel', () => {
         )
     })
 
+    it('starts from a brief that says what the agent is to do', async () => {
+        const { wrapper } = await mountWithAgents([agent(1, 'The writer', ['social_post'])])
+
+        // A prompt the operator has to write from nothing is a prompt they
+        // will not write.
+        const prompt = (wrapper.find('[data-test="agent-prompt"]').element as HTMLTextAreaElement)
+            .value
+
+        expect(prompt).toBe(
+            'Draft a post for social media and create a draft with the social_post tool.',
+        )
+    })
+
     it('will not send without a prompt', async () => {
         const { wrapper } = await mountWithAgents([agent(1, 'The writer', ['social_post'])])
 
         await wrapper.find('[data-test="agent-select"]').setValue('1')
+        await wrapper.find('[data-test="agent-prompt"]').setValue('')
         await flushPromises()
 
         expect(wrapper.find('[data-test="agent-send"]').attributes('disabled')).toBeDefined()
@@ -315,7 +329,9 @@ describe('ComposerPanel — the agent panel', () => {
             agent_id: 1,
             prompt: 'A post about our release',
         })
-        expect(social.notice).toContain('Posts')
+        // What the plugin knows is that the prompt was sent — not that the
+        // agent is writing a post, which is the agent's business.
+        expect(social.notice).toBe('Prompt sent')
     })
 
     it('offers the chat link after the send', async () => {
@@ -333,6 +349,7 @@ describe('ComposerPanel — the agent panel', () => {
 
         const link = wrapper.find('[data-test="agent-chat-link"]')
         expect(link.exists()).toBe(true)
+        expect(link.text()).toBe('See progress here')
         await link.trigger('click')
         expect(push).toHaveBeenCalledWith('/tasks/42')
     })
