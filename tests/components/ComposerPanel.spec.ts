@@ -211,11 +211,12 @@ describe('ComposerPanel — the media', () => {
 
 describe('ComposerPanel — the agent panel', () => {
     /** An agent with the tools it runs with. */
-    function agent(id: number, name: string, tools: string[]): AgentSummary {
+    function agent(id: number, name: string, tools: string[], principalId = 7): AgentSummary {
         return {
             id,
             name,
             description: null,
+            principal_id: principalId,
             tools: tools.map((tool_name) => ({ tool_name })),
         }
     }
@@ -253,6 +254,32 @@ describe('ComposerPanel — the agent panel', () => {
         expect(context.api.get).toHaveBeenCalledWith('/agents', { principal_id: 7 })
         expect(wrapper.find('[data-test="agent-select"]').text()).toContain('The writer')
         expect(wrapper.find('[data-test="agent-select"]').text()).toContain('The reader')
+    })
+
+    it('takes the writing surface while the brief is open', async () => {
+        const { wrapper } = await mountWithAgents([agent(1, 'The writer', ['social_post'])])
+
+        // Writing a post by hand and briefing an agent to write one are two
+        // different jobs, and a panel floating over the empty message box
+        // would leave the operator looking at a form that is not in use.
+        expect(wrapper.find('#cmp-body').exists()).toBe(false)
+        expect(wrapper.find('[data-test="agent-panel"]').exists()).toBe(true)
+    })
+
+    it('brings the writing surface back, with what the operator had typed', async () => {
+        const mounted = mountComposer()
+        await mounted.wrapper.find('#cmp-body').setValue('My own words')
+        mounted.context.api.get = vi.fn().mockResolvedValue({ agents: [] }) as never
+
+        await mounted.wrapper.find('[data-test="draft-with-agent"]').trigger('click')
+        await flushPromises()
+        await mounted.wrapper.find('[data-test="agent-back"]').trigger('click')
+        await flushPromises()
+
+        expect(mounted.wrapper.find('[data-test="agent-panel"]').exists()).toBe(false)
+        expect((mounted.wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe(
+            'My own words',
+        )
     })
 
     it('will not send without a prompt', async () => {

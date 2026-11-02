@@ -17,11 +17,12 @@ beforeEach(() => {
 })
 
 /** An agent with the tools it runs with. */
-function agent(id: number, tools: string[]): AgentSummary {
+function agent(id: number, tools: string[], principalId = 7): AgentSummary {
     return {
         id,
         name: `Agent ${id}`,
         description: null,
+        principal_id: principalId,
         tools: tools.map((tool_name) => ({ tool_name })),
     }
 }
@@ -52,6 +53,18 @@ describe('api/agents — the shapes', () => {
     it('reads an empty list when the answer carries no agents', async () => {
         get.mockResolvedValueOnce({})
         await expect(listAgents(7)).resolves.toEqual([])
+    })
+
+    it('drops an agent that belongs to another principal', async () => {
+        // The request already names the principal; the answer is filtered
+        // again, because an agent of another principal must never be offered.
+        get.mockResolvedValueOnce({
+            agents: [agent(1, ['social_post']), agent(2, ['social_post'], 9)],
+        })
+
+        const agents = await listAgents(7)
+
+        expect(agents.map((entry) => entry.id)).toEqual([1])
     })
 })
 

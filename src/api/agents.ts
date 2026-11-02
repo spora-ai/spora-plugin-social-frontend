@@ -20,6 +20,8 @@ export interface AgentSummary {
     id: number
     name: string
     description: string | null
+    /** The principal the agent belongs to. */
+    principal_id: number
     /** The agent's **enabled** tools — a tool that is off is not on the list. */
     tools: AgentToolSummary[]
 }
@@ -29,12 +31,17 @@ export interface AgentSummary {
  *
  * Only the principal's own agents come back: an agent of another principal is
  * out of the operator's reach, and a post must not be handed to it.
+ *
+ * The request already names the principal, and the answer is filtered again
+ * here: the filter that holds is the one that is in this file, not the one
+ * that is in the request.
  */
 export async function listAgents(principalId: number): Promise<AgentSummary[]> {
     const result = await getApi().get<{ agents?: AgentSummary[] }>('/agents', {
         principal_id: principalId,
     })
-    return result.agents ?? []
+
+    return (result.agents ?? []).filter((agent) => agent.principal_id === principalId)
 }
 
 /**

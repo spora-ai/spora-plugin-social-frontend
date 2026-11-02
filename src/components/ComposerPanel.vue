@@ -288,13 +288,18 @@ async function attachMedia(): Promise<void> {
 }
 
 /**
- * The agent panel: the operator's prompt, the agent that writes the post.
+ * The agent brief: the operator's prompt, the agent that writes the post.
  *
  * The plugin does not write the post itself and does not wait for the agent
  * — it hands the prompt over and lets the operator watch the agent in the
- * host's own chat. The panel therefore ends at a task, not at a post.
+ * host's own chat. The brief therefore ends at a task, not at a post.
+ *
+ * **The brief takes the composer's surface while it is open.** Writing a
+ * post by hand and briefing an agent to write one are two different jobs,
+ * and a panel floating over the empty message box would leave the operator
+ * looking at a form that is not the one in use.
  */
-const agentPanelOpen = ref(false)
+const view = ref<'write' | 'agent'>('write')
 const agentPrompt = ref('')
 const agents = ref<AgentSummary[]>([])
 const selectedAgentId = ref<number | null>(null)
@@ -394,7 +399,9 @@ function failureMessage(e: unknown, fallback: string): string {
  * Read the principal's agents.
  *
  * The list is the host's, and it changes: an agent may have gained the
- * social_post tool since the panel was last open.
+ * social_post tool since the brief was last open. A chosen agent that is no
+ * longer on the list is dropped — it belongs to a principal the operator has
+ * left.
  */
 async function loadAgents(): Promise<void> {
     agentsError.value = null
@@ -404,17 +411,30 @@ async function loadAgents(): Promise<void> {
         agents.value = []
         agentsError.value = failureMessage(e, t('The agents could not be read.'))
     }
+
+    if (selectedAgent.value === null) {
+        selectedAgentId.value = null
+    }
 }
 
 /**
- * Open or close the panel.
+ * Brief an agent instead of writing the post.
  *
- * The panel is the only way in, so the agents are read when it opens.
+ * The agents are read on the way in, because the brief is the only place
+ * they are needed.
  */
-async function toggleAgentPanel(): Promise<void> {
-    agentPanelOpen.value = !agentPanelOpen.value
-    if (!agentPanelOpen.value) return
+async function openAgentView(): Promise<void> {
+    view.value = 'agent'
     await loadAgents()
+}
+
+/**
+ * Back to the writing surface.
+ *
+ * What the operator had typed is still there: the brief never touched it.
+ */
+function closeAgentView(): void {
+    view.value = 'write'
 }
 
 /**
@@ -544,6 +564,17 @@ onMounted(() => {
 })
 
 watch(
+    () => props.principalId,
+    () => {
+        // The agents belong to the principal the operator is working as, so
+        // a switch of principal is a switch of agents.
+        if (view.value === 'agent') {
+            void loadAgents()
+        }
+    },
+)
+
+watch(
     () => props.postId,
     () => {
         void loadPost()
@@ -608,6 +639,100 @@ async function submit(): Promise<void> {
             <p class="text-sm text-destructive">{{ postError }}</p>
         </div>
 
+        <div
+            v-else-if="view === 'agent'"
+            class="surface-card space-y-4 p-4 lg:col-span-2"
+            data-test="agent-panel"
+        >
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 class="text-sm font-semibold">{{ t('Draft with an agent') }}</h2>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                        {{ t('The agent writes the post and saves it as a draft. You find it in Posts, where you can edit it and publish it.') }}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
+                    data-test="agent-back"
+                    @click="closeAgentView"
+                >
+                    {{ t('Write it myself') }}
+                </button>
+            </div>
+
+            <div>
+                <label class="field-label" for="cmp-agent-prompt">{{ t('The prompt') }}</label>
+                <textarea
+                    id="cmp-agent-prompt"
+                    v-model="agentPrompt"
+                    :placeholder="t('What should the post say?')"
+                    class="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-0 placeholder:text-muted-foreground/70"
+                    data-test="agent-prompt"
+                />
+            </div>
+
+            <div>
+                <label class="field-label" for="cmp-agent">{{ t('The agent') }}</label>
+                <select
+                    id="cmp-agent"
+                    v-model="selectedAgentId"
+                    class="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs"
+                    data-test="agent-select"
+                >
+                    <option :value="null">{{ t('Choose an agent') }}</option>
+                    <option v-for="agent in agents" :key="agent.id" :value="agent.id">
+                        {{ agent.name }}
+                    </option>
+                </select>
+            </div>
+
+            <p class="text-xs text-muted-foreground" data-test="agent-note">
+                {{ agentNote }}
+                <button
+                    v-if="showToolsLink"
+                    type="button"
+                    class="underline disabled:cursor-default disabled:no-underline"
+                    :disabled="agentToolsLink.kind !== 'push'"
+                    data-test="agent-tools-link"
+                    @click="goToHost(agentToolsLink)"
+                >
+                    {{ t('Give the agent the tool') }}
+                </button>
+            </p>
+
+            <p v-if="agentError !== null" class="text-xs text-destructive" data-test="agent-error">
+                {{ agentError }}
+            </p>
+
+            <button
+                type="button"
+                class="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors"
+                :class="canSend
+                    ? 'bg-primary text-primary-foreground hover:opacity-90'
+                    : 'cursor-not-allowed bg-muted text-muted-foreground'"
+                :disabled="!canSend || drafting"
+                data-test="agent-send"
+                @click="sendToAgent"
+            >
+                <Send class="h-3.5 w-3.5" />
+                {{ drafting ? t('Sending…') : t('Send to the agent') }}
+            </button>
+
+            <p v-if="sentTaskId !== null" class="text-xs text-muted-foreground" data-test="agent-sent">
+                {{ t('The agent has the prompt. Watch it write in the task chat.') }}
+                <button
+                    type="button"
+                    class="underline disabled:cursor-default disabled:no-underline"
+                    :disabled="taskChatLink.kind !== 'push'"
+                    data-test="agent-chat-link"
+                    @click="goToHost(taskChatLink)"
+                >
+                    {{ t('Open the chat') }}
+                </button>
+            </p>
+        </div>
+
         <template v-else>
             <div class="space-y-4">
                 <div
@@ -658,87 +783,12 @@ async function submit(): Promise<void> {
                             type="button"
                             class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-50"
                             data-test="draft-with-agent"
-                            @click="toggleAgentPanel"
+                            @click="openAgentView"
                         >
                             <Sparkles class="h-3.5 w-3.5" />
                             {{ t('Draft with an agent') }}
                         </button>
                     </div>
-                </div>
-
-                <div v-if="agentPanelOpen" class="surface-card space-y-3 p-4" data-test="agent-panel">
-                    <span class="field-label">{{ t('Draft with an agent') }}</span>
-
-                    <div>
-                        <label class="field-label" for="cmp-agent-prompt">{{ t('The prompt') }}</label>
-                        <textarea
-                            id="cmp-agent-prompt"
-                            v-model="agentPrompt"
-                            :placeholder="t('What should the post say?')"
-                            class="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-0 placeholder:text-muted-foreground/70"
-                            data-test="agent-prompt"
-                        />
-                    </div>
-
-                    <div>
-                        <label class="field-label" for="cmp-agent">{{ t('The agent') }}</label>
-                        <select
-                            id="cmp-agent"
-                            v-model="selectedAgentId"
-                            class="h-8 w-full rounded-lg border border-border bg-background px-2 text-xs"
-                            data-test="agent-select"
-                        >
-                            <option :value="null">{{ t('Choose an agent') }}</option>
-                            <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-                                {{ agent.name }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <p class="text-xs text-muted-foreground" data-test="agent-note">
-                        {{ agentNote }}
-                        <button
-                            v-if="showToolsLink"
-                            type="button"
-                            class="underline disabled:cursor-default disabled:no-underline"
-                            :disabled="agentToolsLink.kind !== 'push'"
-                            data-test="agent-tools-link"
-                            @click="goToHost(agentToolsLink)"
-                        >
-                            {{ t('Give the agent the tool') }}
-                        </button>
-                    </p>
-
-                    <p v-if="agentError !== null" class="text-xs text-destructive" data-test="agent-error">
-                        {{ agentError }}
-                    </p>
-
-                    <button
-                        type="button"
-                        class="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors"
-                        :class="canSend
-                            ? 'bg-primary text-primary-foreground hover:opacity-90'
-                            : 'cursor-not-allowed bg-muted text-muted-foreground'"
-                        :disabled="!canSend || drafting"
-                        data-test="agent-send"
-                        @click="sendToAgent"
-                    >
-                        <Send class="h-3.5 w-3.5" />
-                        {{ drafting ? t('Sending…') : t('Send to the agent') }}
-                    </button>
-
-                    <p v-if="sentTaskId !== null" class="text-xs text-muted-foreground" data-test="agent-sent">
-                        {{ t('The agent has the prompt. Watch it write in the task chat.') }}
-                        <button
-                            type="button"
-                            class="underline disabled:cursor-default disabled:no-underline"
-                            :disabled="taskChatLink.kind !== 'push'"
-                            data-test="agent-chat-link"
-                            @click="goToHost(taskChatLink)"
-                        >
-                            {{ t('Open the task chat') }}
-                        </button>
-                    </p>
                 </div>
 
                 <div class="surface-card p-4">
