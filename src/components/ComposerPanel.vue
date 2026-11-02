@@ -669,12 +669,16 @@ async function submit(): Promise<void> {
                 <div v-if="agentPanelOpen" class="surface-card space-y-3 p-4" data-test="agent-panel">
                     <span class="field-label">{{ t('Draft with an agent') }}</span>
 
-                    <textarea
-                        v-model="agentPrompt"
-                        :placeholder="t('What should the post say?')"
-                        class="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-0 placeholder:text-muted-foreground/70"
-                        data-test="agent-prompt"
-                    />
+                    <div>
+                        <label class="field-label" for="cmp-agent-prompt">{{ t('The prompt') }}</label>
+                        <textarea
+                            id="cmp-agent-prompt"
+                            v-model="agentPrompt"
+                            :placeholder="t('What should the post say?')"
+                            class="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-0 placeholder:text-muted-foreground/70"
+                            data-test="agent-prompt"
+                        />
+                    </div>
 
                     <div>
                         <label class="field-label" for="cmp-agent">{{ t('The agent') }}</label>

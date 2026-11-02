@@ -136,6 +136,7 @@
   "The media does not fit this network": "Die Medien passen nicht zu diesem Netzwerk",
   "The platform limits could not be read, so they are not checked.": "Die Plattformgrenzen konnten nicht gelesen werden, sie werden also nicht geprüft.",
   "The post could not be loaded.": "Der Beitrag konnte nicht geladen werden.",
+  "The prompt": "Der Prompt",
   "The prompt could not be sent.": "Die Anweisung konnte nicht gesendet werden.",
   "The reach is summed across the networks a post went to — a rough figure, because each network counts reach its own way.": "Die Reichweite wird über die Netzwerke summiert, in denen ein Beitrag veröffentlicht wurde — eine grobe Zahl, weil jedes Netzwerk Reichweite anders zählt.",
   "The rows are kept apart, because each network counts reach its own way — LinkedIn’s share statistics only exist for organisation pages, and Instagram’s impressions are not Facebook’s impressions. The totals above sum them anyway, which makes them a rough figure rather than a comparable one.": "Die Zeilen bleiben getrennt, weil jedes Netzwerk Reichweite anders zählt — die Share-Statistiken von LinkedIn gibt es nur für Organisationsseiten, und Instagrams Impressionen sind nicht Facebooks Impressionen. Die Summen oben addieren sie trotzdem, was sie zu einer groben statt einer vergleichbaren Zahl macht.",
