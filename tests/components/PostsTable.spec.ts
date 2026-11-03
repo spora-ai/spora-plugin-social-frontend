@@ -50,6 +50,17 @@ describe('PostsTable', () => {
         expect(wrapper.find('[data-platform="linkedin"]').exists()).toBe(true)
     })
 
+    it('warns that a post without an account cannot go out', () => {
+        const post = makePost({ status: 'draft', accounts: [], targets: [] })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+
+        // A draft may be written before any account is connected. It has no
+        // platform to go to, and the row says so rather than showing an
+        // empty column.
+        expect(wrapper.find('[data-test="post-no-account-88"]').exists()).toBe(true)
+        expect(wrapper.find('tbody').text()).toContain('No account')
+    })
+
     it('counts the failed targets', () => {
         const post = makePost({
             status: 'partial',

@@ -310,6 +310,18 @@ watch(drawerPostId, () => {
 
                     <div>
                         <span class="field-label">{{ t('Targets') }}</span>
+                        <!--
+                            A draft may sit without an account. It has no platform
+                            to go to, and the drawer says so instead of showing
+                            nothing under the label.
+                        -->
+                        <p
+                            v-if="drawerPost.targets.length === 0"
+                            class="mt-1 text-xs text-amber-600 dark:text-amber-400"
+                            :data-test="`drawer-no-account-${drawerPost.id}`"
+                        >
+                            {{ t('No account — cannot go out') }}
+                        </p>
                         <div class="space-y-2">
                             <div
                                 v-for="target in drawerPost.targets"

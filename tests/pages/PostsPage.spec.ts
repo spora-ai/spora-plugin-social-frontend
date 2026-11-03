@@ -186,6 +186,16 @@ describe('PostsPage — the two views of the Posts tab', () => {
         expect(drawer.text()).toContain('Instagram only accepts JPEG')
     })
 
+    it('warns that a draft without an account cannot go out', async () => {
+        // A draft may be written before any account is connected. The drawer
+        // says so instead of showing nothing under the Targets label.
+        const { wrapper } = await mountDrawer(
+            makePost({ id: 88, status: 'draft', accounts: [], targets: [] }),
+        )
+
+        expect(wrapper.find('[data-test="drawer-no-account-88"]').exists()).toBe(true)
+    })
+
     it('names a target’s outcome in words, not in the raw enum', async () => {
         // The post's own status was translated; the target's status was the
         // one English word left on the screen.
