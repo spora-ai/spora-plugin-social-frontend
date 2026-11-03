@@ -15,6 +15,23 @@ export function agentSchedulesPath(agentId: number): string {
     return `${AGENT_SCHEDULES_PATH_PREFIX}${agentId}/scheduled-runs`
 }
 
+/** The host's task-chat route (`spora-frontend/src/router/index.ts`). */
+export const TASK_CHAT_PATH_PREFIX = '/tasks/'
+
+export function taskChatPath(taskId: number): string {
+    return `${TASK_CHAT_PATH_PREFIX}${taskId}`
+}
+
+/**
+ * The agent's tools page, where the operator enables the tools it runs with.
+ *
+ * It sits under the same `/agents/{id}` prefix as the scheduled runs, so the
+ * path is built from that one.
+ */
+export function agentToolsPath(agentId: number): string {
+    return `${AGENT_SCHEDULES_PATH_PREFIX}${agentId}/tools`
+}
+
 /**
  * The slice of `PluginHostContext['router']` this module needs, re-declared
  * structurally so `lib/` never imports the ambient shims and a test can pass

@@ -17,7 +17,6 @@ import type {
     CalendarPayload,
     ConnectAccountResult,
     CreatePostPayload,
-    DraftResult,
     MediaAssetSummary,
     MediaCheckFit,
     MediaPrepareResult,
@@ -329,14 +328,4 @@ export async function detachMedia(
         post_id: postId,
         media_asset_id: mediaAssetId,
     })
-}
-
-/** A body per platform — the drafts that work for LinkedIn and Facebook differ. */
-export async function generateDraft(payload: {
-    principal_id: number
-    brief: string
-    platforms: Platform[]
-    account_ids: number[]
-}): Promise<DraftResult> {
-    return getApi().post<DraftResult>(`${BASE}/drafts/generate`, payload)
 }

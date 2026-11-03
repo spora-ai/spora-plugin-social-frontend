@@ -9,7 +9,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Image } from 'lucide-vue-next'
+import { Image, TriangleAlert } from 'lucide-vue-next'
 import PostImage from './PostImage.vue'
 import { measuredTargets, formatCounter, postEngagementRate, postPlatforms, postReach } from '../lib/metrics'
 import { awaitingAgent, sourceLabel } from '../lib/postSource'
@@ -132,7 +132,20 @@ function postWhen(post: SocialPost): string | null {
                         </p>
                     </td>
                     <td class="px-3 py-2.5">
-                        <div class="flex flex-wrap gap-1">
+                        <!--
+                            A draft may be written before any account is connected.
+                            It has no platform to go to, and the row says so rather
+                            than showing an empty column.
+                        -->
+                        <span
+                            v-if="post.targets.length === 0"
+                            class="pill pill-partial"
+                            :data-test="`post-no-account-${post.id}`"
+                        >
+                            <TriangleAlert class="h-3 w-3" />
+                            {{ t('No account — cannot go out') }}
+                        </span>
+                        <div v-else class="flex flex-wrap gap-1">
                             <span
                                 v-for="platform in postPlatforms(post)"
                                 :key="platform"

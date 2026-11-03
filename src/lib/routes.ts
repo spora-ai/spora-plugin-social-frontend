@@ -54,6 +54,7 @@ export function appRoutes(): RouteRecordRaw[] {
  */
 const SECTION_FOR_ROUTE: Record<string, Section> = {
     compose: 'compose',
+    'compose-post': 'compose',
     calendar: 'calendar',
     posts: 'posts',
     analytics: 'analytics',
@@ -78,6 +79,7 @@ export function sectionForRouteName(name: string | symbol | null | undefined): S
  */
 const TAB_FOR_ROUTE: Record<string, RailSection> = {
     compose: 'compose',
+    'compose-post': 'compose',
     calendar: 'calendar',
     posts: 'posts',
     analytics: 'posts',
@@ -95,6 +97,9 @@ export const APP_ROUTES: AppRoute[] = [
     { path: '/', name: 'root', component: ComposePage },
     { path: '/p/:principalId', name: 'root-scoped', component: ComposePage },
     { path: '/p/:principalId/compose', name: 'compose', component: ComposePage },
+    // The composer, editing one post: the agent's draft, opened for the
+    // operator to change before it goes out.
+    { path: '/p/:principalId/compose/:postId', name: 'compose-post', component: ComposePage },
     { path: '/p/:principalId/calendar', name: 'calendar', component: CalendarPage },
     { path: '/p/:principalId/posts', name: 'posts', component: PostsPage },
     { path: '/p/:principalId/posts/analytics', name: 'analytics', component: PostsPage },

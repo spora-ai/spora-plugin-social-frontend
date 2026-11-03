@@ -72,6 +72,7 @@ export function makePost(overrides: Partial<SocialPost> = {}): SocialPost {
         title: 'Q4 release',
         body: 'We shipped…',
         platform_bodies: {},
+        hashtags: [],
         status: 'published',
         source: 'manual',
         scheduled_for: null,

@@ -8,18 +8,20 @@ import type { PluginHostContext } from '../../src/shims'
 
 let get: ReturnType<typeof vi.fn>
 let post: ReturnType<typeof vi.fn>
+let patch: ReturnType<typeof vi.fn>
 let del: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
     setActivePinia(createPinia())
     get = vi.fn().mockResolvedValue({})
     post = vi.fn().mockResolvedValue({})
+    patch = vi.fn().mockResolvedValue({})
     del = vi.fn().mockResolvedValue({ deleted: true })
     setApi({
         get: get as never,
         post: post as never,
         put: vi.fn() as never,
-        patch: vi.fn() as never,
+        patch: patch as never,
         delete: del as never,
     } satisfies PluginHostContext['api'])
 })
@@ -405,6 +407,32 @@ describe('stores/social — the posts', () => {
 
         expect(store.error).not.toBeNull()
         expect(store.posts).toHaveLength(1)
+    })
+
+    it('saves the changes to a post and puts the saved one back', async () => {
+        get.mockResolvedValueOnce({ items: [makePost({ id: 87, body: 'The old copy.' })], total: 1 })
+        patch.mockResolvedValueOnce(makePost({ id: 87, body: 'The new copy.' }))
+        const store = useSocialStore()
+        await store.loadPosts(7)
+
+        const updated = await store.updatePost(7, 87, { body: 'The new copy.' })
+
+        expect(patch).toHaveBeenCalledWith('/plugins/social/posts/87', {
+            body: 'The new copy.',
+            principal_id: 7,
+        })
+        expect(updated?.body).toBe('The new copy.')
+        expect(store.posts[0]?.body).toBe('The new copy.')
+    })
+
+    it('reports a failed save', async () => {
+        patch.mockRejectedValueOnce(new Error('boom'))
+        const store = useSocialStore()
+
+        const updated = await store.updatePost(7, 87, { body: 'The new copy.' })
+
+        expect(updated).toBeNull()
+        expect(store.error).not.toBeNull()
     })
 })
 

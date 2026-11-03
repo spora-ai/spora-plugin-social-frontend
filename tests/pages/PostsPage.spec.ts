@@ -186,6 +186,16 @@ describe('PostsPage — the two views of the Posts tab', () => {
         expect(drawer.text()).toContain('Instagram only accepts JPEG')
     })
 
+    it('warns that a draft without an account cannot go out', async () => {
+        // A draft may be written before any account is connected. The drawer
+        // says so instead of showing nothing under the Targets label.
+        const { wrapper } = await mountDrawer(
+            makePost({ id: 88, status: 'draft', accounts: [], targets: [] }),
+        )
+
+        expect(wrapper.find('[data-test="drawer-no-account-88"]').exists()).toBe(true)
+    })
+
     it('names a target’s outcome in words, not in the raw enum', async () => {
         // The post's own status was translated; the target's status was the
         // one English word left on the screen.
@@ -414,6 +424,31 @@ describe('PostsPage — the drawer acts on the post', () => {
         await flushPromises()
 
         expect(router.currentRoute.value.path).toBe('/p/7/posts')
+    })
+
+    it('offers to edit a draft', async () => {
+        const { wrapper } = await mountDrawer(DRAFT_POST)
+
+        const edit = wrapper.find('[data-test="drawer-edit"]')
+        expect(edit.exists()).toBe(true)
+        expect(edit.text()).toContain('Edit')
+        expect(edit.attributes('href')).toBe('/p/7/compose/88')
+    })
+
+    it('offers to edit a scheduled post', async () => {
+        const { wrapper } = await mountDrawer(
+            makePost({ id: 88, status: 'scheduled', scheduled_for: '2026-11-09T09:00:00+00:00' }),
+        )
+
+        expect(wrapper.find('[data-test="drawer-edit"]').attributes('href')).toBe('/p/7/compose/88')
+    })
+
+    it('does not offer to edit a post that already went out', async () => {
+        // The copy is on the network already; editing it here would change
+        // nothing the network holds.
+        const { wrapper } = await mountDrawer(PUBLISHED_POST)
+
+        expect(wrapper.find('[data-test="drawer-edit"]').exists()).toBe(false)
     })
 })
 

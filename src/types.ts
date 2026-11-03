@@ -150,6 +150,13 @@ export interface SocialPost {
     body: string
     /** A body per platform — the drafts that work for LinkedIn and Facebook differ. */
     platform_bodies: Partial<Record<Platform, string>>
+    /**
+     * The tags the post carries, without their hashes.
+     *
+     * The hashes are added when the post is composed for a platform, so one
+     * post carries them once and every network gets them the same.
+     */
+    hashtags: string[]
     status: PostStatus
     /**
      * Who wrote the post. The static slot is gone, so an agent-written
@@ -178,6 +185,7 @@ export interface CreatePostPayload {
     title: string
     body: string
     platform_bodies?: Partial<Record<Platform, string>>
+    hashtags?: string[]
     account_ids: number[]
     scheduled_for?: string | null
     timezone: string
@@ -351,6 +359,13 @@ export interface PlatformRules {
     mime_types: string[]
     max_bytes: number
     max_text: number
+    /**
+     * How many characters the network shows before it hides the rest.
+     *
+     * A post can fit the limit and still say nothing in the first line —
+     * this is what a reader sees before the network's "see more".
+     */
+    visible_chars: number
     /** What the network accepts, in its own words. */
     media_note: string
     /** The remedy for an image the network refuses. */
@@ -374,12 +389,6 @@ export interface SocialConfig {
     app_url: string | null
     app_url_public: boolean
     rules: Record<Platform, PlatformRules>
-}
-
-export interface DraftResult {
-    title: string
-    bodies: Partial<Record<Platform, string>>
-    hashtags: string[]
 }
 
 /**

@@ -198,6 +198,28 @@ export const useSocialStore = defineStore('social', () => {
         }
     }
 
+    /**
+     * Save the changes to a post.
+     *
+     * The post goes back into the list it came from: the drawer and the
+     * composer read the store, and a post that was edited but still shows
+     * its old copy is a post the operator cannot trust.
+     */
+    async function updatePost(
+        principalId: number,
+        id: number,
+        payload: Partial<CreatePostPayload>,
+    ): Promise<SocialPost | null> {
+        try {
+            const post = await socialApi.updatePost(principalId, id, payload)
+            replacePost(post)
+            return post
+        } catch (e) {
+            fail(e, t('Could not save the post.'))
+            return null
+        }
+    }
+
     async function publishPost(principalId: number, id: number): Promise<SocialPost | null> {
         try {
             const post = await socialApi.publishPost(principalId, id)
@@ -277,6 +299,7 @@ export const useSocialStore = defineStore('social', () => {
         refreshConnection,
         checkConnectionHealth,
         createPost,
+        updatePost,
         publishPost,
         retryPost,
         unpublishPost,
