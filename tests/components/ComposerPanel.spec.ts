@@ -5,9 +5,8 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import ComposerPanel from '../../src/components/ComposerPanel.vue'
 import ComposePage from '../../src/pages/ComposePage.vue'
 import { useSocialStore } from '../../src/stores/social'
-import { ApiError } from '../../src/api/client'
 import type { AgentSummary } from '../../src/api/agents'
-import { makeAccount, makeConnection, makeMedia, makePost } from '../fixtures'
+import { makeAccount, makeConnection, makeMedia, makePost, hostApiError } from '../fixtures'
 import { CONFIG_PAYLOAD } from '../recorded'
 import { hostContext, mountComponent, mountPage, stubRoutes } from '../mountPage'
 import { APP_ROUTES } from '../../src/lib/routes'
@@ -370,7 +369,7 @@ describe('ComposerPanel — the agent panel', () => {
     })
 
     it('says what went wrong when the task could not be started', async () => {
-        const post = vi.fn().mockRejectedValue(new ApiError('The agent is busy.', 'busy', 409))
+        const post = vi.fn().mockRejectedValue(hostApiError('The agent is busy.', 'busy', 409))
         const { wrapper, context } = await mountWithAgents([agent(1, 'The writer', ['social_post'])])
         context.api.post = post as never
 
@@ -409,7 +408,7 @@ describe('ComposerPanel — the agent panel', () => {
         const mounted = mountComposer()
         mounted.context.api.get = vi
             .fn()
-            .mockRejectedValue(new ApiError('The backend is down.', 'down', 503)) as never
+            .mockRejectedValue(hostApiError('The backend is down.', 'down', 503)) as never
 
         await mounted.wrapper.find('[data-test="draft-with-agent"]').trigger('click')
         await flushPromises()
@@ -899,7 +898,7 @@ describe('ComposerPanel — editing a post', () => {
     it('says so when the post could not be loaded', async () => {
         const context = hostContext()
         context.api.get = vi.fn().mockRejectedValue(
-            new ApiError('Post 12 was not found for this principal.', 'not_found', 404),
+            hostApiError('Post 12 was not found for this principal.', 'not_found', 404),
         ) as never
 
         const mounted = mountComposer(context, 12)

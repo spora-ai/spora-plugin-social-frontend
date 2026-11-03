@@ -19,13 +19,30 @@ export function getApi(): PluginHostContext['api'] {
     return _api
 }
 
-export class ApiError extends Error {
-    constructor(
-        message: string,
-        public readonly code: string,
-        public readonly status: number,
-    ) {
-        super(message)
-        this.name = 'ApiError'
-    }
+/**
+ * The host's error, as the plugin can see it.
+ *
+ * The host's client throws its own `ApiError`
+ * (`spora-frontend/src/api/client.ts`), and a plugin bundle is a separate
+ * copy of that code — so `instanceof` against a class this file declares
+ * never matches the error the host throws, and a check written that way
+ * drops every sentence the backend sent. The shape is the same error
+ * whatever bundle threw it.
+ */
+export interface ApiError extends Error {
+    readonly code: string
+    readonly status: number
+}
+
+/**
+ * Whether the failure is the API's own answer.
+ *
+ * The shape, not the class — see {@see ApiError}.
+ */
+export function isApiError(e: unknown): e is ApiError {
+    if (!(e instanceof Error)) return false
+
+    const candidate = e as { code?: unknown; status?: unknown }
+
+    return typeof candidate.code === 'string' && typeof candidate.status === 'number'
 }

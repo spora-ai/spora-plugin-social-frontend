@@ -6,6 +6,7 @@
  * same shape the PHP serialiser emits. A partial fixture would let a typo'd
  * field name pass.
  */
+import type { ApiError } from '../src/api/client'
 import type { Principal } from '../src/api/principals'
 import type {
     ComposerAttachment,
@@ -148,3 +149,19 @@ export function makeAttachment(overrides: Partial<ComposerAttachment> = {}): Com
 
 /** The platforms in the order the UI lists them. */
 export const ALL_PLATFORMS: Platform[] = ['linkedin', 'facebook', 'instagram']
+
+/**
+ * The error the host's client throws.
+ *
+ * The host owns the class (`spora-frontend/src/api/client.ts`) and the plugin
+ * bundle cannot import it — so the fixture builds the same *shape*. A fixture
+ * built from a plugin-local class would pass while production dropped the
+ * message.
+ */
+export function hostApiError(
+    message: string,
+    code: string,
+    status: number,
+): ApiError {
+    return Object.assign(new Error(message), { name: 'ApiError', code, status })
+}

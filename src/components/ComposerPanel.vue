@@ -26,7 +26,7 @@ import MediaStrip from './MediaStrip.vue'
 import AccountPicker from './AccountPicker.vue'
 import { HOST_CONTEXT_KEY } from '../shims'
 import { useSocialStore } from '../stores/social'
-import { ApiError, getApi } from '../api/client'
+import { getApi, isApiError } from '../api/client'
 import * as socialApi from '../api/social'
 import { agentHasSocialTool, listAgents, type AgentSummary } from '../api/agents'
 import {
@@ -403,7 +403,7 @@ function goToHost(action: HostLinkAction): void {
  * hide it.
  */
 function failureMessage(e: unknown, fallback: string): string {
-    if (e instanceof ApiError) return e.message
+    if (isApiError(e)) return e.message
     if (e instanceof Error && e.message !== '') return e.message
     return fallback
 }
