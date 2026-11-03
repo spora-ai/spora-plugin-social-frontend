@@ -153,10 +153,9 @@ export const ALL_PLATFORMS: Platform[] = ['linkedin', 'facebook', 'instagram']
 /**
  * The error the host's client throws.
  *
- * The host owns the class (`spora-frontend/src/api/client.ts`) and the plugin
- * bundle cannot import it — so the fixture builds the same *shape*. A fixture
- * built from a plugin-local class would pass while production dropped the
- * message.
+ * The host owns the class and the plugin bundle cannot import it, so the
+ * fixture builds the same shape. A fixture built from a plugin-local
+ * class would pass while production dropped the message.
  */
 export function hostApiError(
     message: string,

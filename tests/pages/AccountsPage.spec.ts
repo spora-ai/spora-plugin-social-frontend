@@ -94,9 +94,9 @@ describe('AccountsPage', () => {
         await router.push('/p/7/accounts')
         await router.isReady()
 
-        // The backend refuses it, and its sentence says what to add and where.
-        // The error is the host's own class, which the plugin bundle cannot
-        // import — so the plugin has to recognise it by its shape.
+        // The backend refuses it, and its sentence says what to add and
+        // where. The error is the host's own class, which the plugin
+        // bundle cannot import — so it is recognised by its shape.
         const post = vi.fn().mockRejectedValue(
             hostApiError(
                 'LinkedIn is not configured. Set its client id and client secret in the plugin settings first.',
@@ -141,7 +141,9 @@ describe('AccountsPage', () => {
         // backend refuses the connection and says where the address is set.
         const refusal =
             'SPORA_APP_URL must be a publicly reachable HTTPS address before an account can be connected — '
-            + 'the platform fetches published media from the internet.'
+            + 'the platform fetches published media from the internet. Set it in your .env or config.php; '
+            + 'the global settings list it read-only. On a development install, turn on '
+            + 'SPORA_SOCIAL_ALLOW_LOCAL_APP_URL in Settings → Plugins.'
         const post = vi.fn().mockRejectedValue(hostApiError(refusal, 'VALIDATION_ERROR', 422))
         const context = contextWith(CONFIG_PAYLOAD, META_ONLY)
         context.api.post = post as never
@@ -156,6 +158,29 @@ describe('AccountsPage', () => {
         // start the connection" — that one names neither the setting nor
         // the file it is set in.
         expect(social.error).toBe(refusal)
+    })
+
+    it('falls back when the backend sent no sentence', async () => {
+        const pinia = createPinia()
+        const social = useSocialStore(pinia)
+
+        const router = makeRouter()
+        await router.push('/p/7/accounts')
+        await router.isReady()
+
+        // An error with no message is no sentence, and an empty banner
+        // would hide the failure instead of reporting it.
+        const post = vi.fn().mockRejectedValue(hostApiError('', 'VALIDATION_ERROR', 422))
+        const context = contextWith(CONFIG_PAYLOAD, META_ONLY)
+        context.api.post = post as never
+
+        const wrapper = mountPage(AccountsPage, pinia, router, context)
+        await flushPromises()
+
+        await wrapper.find('[data-test="connect-linkedin"]').trigger('click')
+        await flushPromises()
+
+        expect(social.error).toBe('Could not start the connection.')
     })
 
     it('does not say so when the provider is configured', async () => {

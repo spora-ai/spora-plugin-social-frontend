@@ -307,8 +307,8 @@ function looksLikeCopy(value) {
  *
  * Two shapes reach the operator: the literal itself
  * (`error.value = '…'`) and the fallback branch of a conditional
- * (`error.value = e instanceof ApiError ? e.message : '…'`) — the
- * second is the shape every store's failure message takes.
+ * (`error.value = apiMessage(e, '…')`) — the second is the shape every
+ * store's failure message takes.
  */
 function assignedLiteral(node) {
     if (node?.type === 'Literal') {

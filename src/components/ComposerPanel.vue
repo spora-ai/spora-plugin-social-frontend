@@ -403,7 +403,7 @@ function goToHost(action: HostLinkAction): void {
  * hide it.
  */
 function failureMessage(e: unknown, fallback: string): string {
-    if (isApiError(e)) return e.message
+    if (isApiError(e)) return e.message !== '' ? e.message : fallback
     if (e instanceof Error && e.message !== '') return e.message
     return fallback
 }

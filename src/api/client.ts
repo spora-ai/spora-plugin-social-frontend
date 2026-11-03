@@ -23,11 +23,10 @@ export function getApi(): PluginHostContext['api'] {
  * The host's error, as the plugin can see it.
  *
  * The host's client throws its own `ApiError`
- * (`spora-frontend/src/api/client.ts`), and a plugin bundle is a separate
- * copy of that code — so `instanceof` against a class this file declares
- * never matches the error the host throws, and a check written that way
- * drops every sentence the backend sent. The shape is the same error
- * whatever bundle threw it.
+ * (`spora-frontend/src/api/client.ts`), and a plugin bundle declares its
+ * own copy of that class — so `instanceof` against the class this file
+ * declares never matches the error the host throws, and a check written
+ * that way drops every sentence the backend sent.
  */
 export interface ApiError extends Error {
     readonly code: string
@@ -45,4 +44,15 @@ export function isApiError(e: unknown): e is ApiError {
     const candidate = e as { code?: unknown; status?: unknown }
 
     return typeof candidate.code === 'string' && typeof candidate.status === 'number'
+}
+
+/**
+ * The sentence to show the operator.
+ *
+ * The API's own sentence when it sent one — it names the part that was
+ * refused and where to fix it. An error whose message is empty carries no
+ * sentence, and an empty banner hides the failure instead of reporting it.
+ */
+export function apiMessage(e: unknown, fallback: string): string {
+    return isApiError(e) && e.message !== '' ? e.message : fallback
 }

@@ -453,7 +453,13 @@ check "the notice alone decides" src/components/ConnectionsGrid.vue \
     return entry.needs_setup' \
   tests/components/ConnectionsGrid.spec.ts
 
-# 62. The API's error is recognised by its shape, not by its class.
+# 62. The store keeps the API's sentence.
+check "the store keeps the API's sentence" src/stores/social.ts \
+  '        error.value = apiMessage(e, fallback)' \
+  '        error.value = fallback' \
+  tests/stores/social.spec.ts
+
+# 63. The API's error is recognised by its shape, not by its class.
 check "the API error is recognised by shape" src/api/client.ts \
   "    return typeof candidate.code === 'string' && typeof candidate.status === 'number'" \
   '    return false' \

@@ -206,10 +206,9 @@ describe('stores/social — the reads', () => {
     })
 
     it('carries the backend’s own message when it sent one', async () => {
-        // The host's client throws its own error class, and the plugin
-        // bundle cannot import it — so the plugin has to recognise the
-        // error by its shape. A fixture built from a plugin-local class
-        // would pass while production dropped the sentence.
+        // The host's client throws its own error class, so the plugin has
+        // to recognise the error by its shape. A fixture built from a
+        // plugin-local class would pass while production dropped it.
         get.mockRejectedValueOnce(hostApiError('The connection expired.', 'expired', 409))
         const store = useSocialStore()
 

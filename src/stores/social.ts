@@ -10,7 +10,7 @@
  */
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { computed, ref } from 'vue'
-import { isApiError } from '../api/client'
+import { apiMessage } from '../api/client'
 import { t } from '../i18n'
 import * as socialApi from '../api/social'
 import type {
@@ -69,13 +69,13 @@ export const useSocialStore = defineStore('social', () => {
     /**
      * What the operator is told.
      *
-     * The backend's sentence when it sent one: it names the part that was
-     * refused and where to fix it, and a generic sentence hides both. The
-     * fallback is for the failures that carry no sentence at all — a network
-     * that never answered.
+     * The backend's sentence names the part that was refused and where to
+     * fix it; a generic sentence hides both. The fallback is for the
+     * failures that carry no sentence at all — a network that never
+     * answered.
      */
     function fail(e: unknown, fallback: string): void {
-        error.value = isApiError(e) ? e.message : fallback
+        error.value = apiMessage(e, fallback)
     }
 
     function setNotice(message: string | null): void {
@@ -136,7 +136,7 @@ export const useSocialStore = defineStore('social', () => {
                 config.value = await socialApi.getConfig()
                 configError.value = null
             } catch (e) {
-                configError.value = isApiError(e) ? e.message : t('Could not read the plugin configuration.')
+                configError.value = apiMessage(e, t('Could not read the plugin configuration.'))
                 fail(e, t('Could not read the plugin configuration.'))
             }
         })()
