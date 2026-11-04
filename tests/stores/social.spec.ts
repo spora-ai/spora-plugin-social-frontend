@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { ApiError, setApi } from '../../src/api/client'
+import { setApi } from '../../src/api/client'
 import { useSocialStore } from '../../src/stores/social'
 import { CONFIG_PAYLOAD, CONNECTIONS_PAYLOAD } from '../recorded'
-import { makePost } from '../fixtures'
+import { hostApiError, makePost } from '../fixtures'
 import type { PluginHostContext } from '../../src/shims'
 
 let get: ReturnType<typeof vi.fn>
@@ -206,7 +206,10 @@ describe('stores/social — the reads', () => {
     })
 
     it('carries the backend’s own message when it sent one', async () => {
-        get.mockRejectedValueOnce(new ApiError('The connection expired.', 'expired', 409))
+        // The host's client throws its own error class, so the plugin has
+        // to recognise the error by its shape. A fixture built from a
+        // plugin-local class would pass while production dropped it.
+        get.mockRejectedValueOnce(hostApiError('The connection expired.', 'expired', 409))
         const store = useSocialStore()
 
         await store.loadConnections(7)
@@ -215,7 +218,7 @@ describe('stores/social — the reads', () => {
     })
 
     it('reports a failed config read with the backend’s message', async () => {
-        get.mockRejectedValueOnce(new ApiError('No client id.', 'config', 422))
+        get.mockRejectedValueOnce(hostApiError('No client id.', 'config', 422))
         const store = useSocialStore()
 
         await store.loadConfig()

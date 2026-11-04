@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { ApiError, setApi } from '../../src/api/client'
+import { setApi } from '../../src/api/client'
 import { usePrincipalsStore } from '../../src/stores/principals'
-import { makePrincipal } from '../fixtures'
+import { hostApiError, makePrincipal } from '../fixtures'
 import type { PluginHostContext } from '../../src/shims'
 
 let get: ReturnType<typeof vi.fn>
@@ -64,7 +64,7 @@ describe('stores/principals', () => {
     })
 
     it('carries the backend’s own message when it sent one', async () => {
-        get.mockRejectedValueOnce(new ApiError('The session expired.', 'unauthorized', 401))
+        get.mockRejectedValueOnce(hostApiError('The session expired.', 'unauthorized', 401))
         const store = usePrincipalsStore()
 
         await store.loadPrincipals()
