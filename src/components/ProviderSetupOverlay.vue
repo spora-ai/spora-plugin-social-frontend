@@ -14,6 +14,15 @@
  * **The panel names its own colour.** A `<dialog>` carries the user agent's
  * `color: canvastext`, which stays black in the dark theme — so the text
  * would be black on a dark panel unless the panel says which colour it wants.
+ *
+ * **The dialog is a screen high, not a page high.** `h-full` would size it to
+ * the panel it is mounted in — which is as tall as the whole page — and the
+ * guide would then sit in the middle of the page rather than of the screen.
+ *
+ * **The dialog is `box-border`.** The plugin ships no preflight, so nothing
+ * sets `box-sizing` and the user agent's own border and padding would be
+ * added *outside* the height — the guide would hang 38 pixels below the
+ * middle of the screen.
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -134,8 +143,8 @@ async function copyRedirectUri(): Promise<void> {
     <dialog
         v-if="open"
         ref="dialogRef"
-        class="fixed inset-0 z-50 m-0 max-h-none max-w-none h-full w-full bg-transparent p-4 backdrop:bg-black/40 open:flex items-center justify-center"
-        :aria-label="guide?.label"
+        class="fixed inset-0 z-50 box-border m-0 max-h-none max-w-none h-screen w-full bg-transparent p-4 backdrop:bg-black/40 open:flex items-center justify-center"
+        :aria-label="t('Setup guide')"
         data-test="setup-overlay"
         @click="onBackdropClick"
         @keydown="onKeydown"
