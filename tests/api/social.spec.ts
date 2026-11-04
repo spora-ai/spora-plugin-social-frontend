@@ -218,6 +218,7 @@ describe('api/social — the shapes', () => {
             client_id: null,
             config_id: null,
             needs_setup: null,
+            redirect_uri: null,
         })
         expect(config.providers.linkedin.configured).toBe(false)
         expect(config.app_url).toBeNull()

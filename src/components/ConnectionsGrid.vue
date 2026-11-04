@@ -9,14 +9,15 @@
  * the status and the "needs reconnect" flag sit on the connection's card, and
  * an account carries only what is its own.
  *
- * **The setup instruction does not live here.** The app id, the secret and
- * the configuration id are configured in Settings → Plugins, and the redirect
- * URI is part of that instruction — so a card here would send the operator to
- * a second place for the same task.
+ * **The card does not carry the setup instruction; the overlay does.** The
+ * app id, the secret and the configuration id are configured in Settings →
+ * Plugins, and the redirect URL is part of that instruction — so the card
+ * opens the guide and the guide names the place to go and the URL to
+ * register.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, RefreshCw, Trash } from 'lucide-vue-next'
+import { BookOpen, Plus, RefreshCw, Trash } from 'lucide-vue-next'
 import { PLATFORM_LABELS } from '../lib/platforms'
 import {
     connectionExpiryNote,
@@ -37,6 +38,7 @@ const emit = defineEmits<{
     connect: [provider: Provider]
     refresh: [connection: SocialConnection]
     disconnect: [connection: SocialConnection]
+    guide: [provider: Provider]
 }>()
 
 const { t } = useI18n()
@@ -178,15 +180,26 @@ function setupNotice(provider: Provider): ProviderSetupNotice | null {
                     <span class="provider-chip" :data-provider="provider">
                         {{ providerLabel(provider) }}
                     </span>
-                    <button
-                        type="button"
-                        class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
-                        :data-test="`connect-${provider}`"
-                        @click="emit('connect', provider)"
-                    >
-                        <Plus class="h-3.5 w-3.5" />
-                        {{ t('Connect {provider}', { provider: providerLabel(provider) }) }}
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
+                            :data-test="`setup-guide-${provider}`"
+                            @click="emit('guide', provider)"
+                        >
+                            <BookOpen class="h-3.5 w-3.5" />
+                            {{ t('Setup guide') }}
+                        </button>
+                        <button
+                            type="button"
+                            class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
+                            :data-test="`connect-${provider}`"
+                            @click="emit('connect', provider)"
+                        >
+                            <Plus class="h-3.5 w-3.5" />
+                            {{ t('Connect {provider}', { provider: providerLabel(provider) }) }}
+                        </button>
+                    </div>
                 </div>
 
                 <!-- The wording is the backend's: the plugin knows what a

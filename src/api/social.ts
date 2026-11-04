@@ -153,6 +153,7 @@ function readProviderConfig(entry: Partial<ProviderConfig> | undefined): Provide
         client_id: entry?.client_id ?? null,
         config_id: entry?.config_id ?? null,
         needs_setup: readSetupNotice(entry?.needs_setup),
+        redirect_uri: entry?.redirect_uri ?? null,
     }
 }
 

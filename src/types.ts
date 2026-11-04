@@ -340,6 +340,17 @@ export interface ProviderConfig {
      * notice at all.
      */
     needs_setup: ProviderSetupNotice | null
+    /**
+     * The URL the platform has to be given, when there is one to give.
+     *
+     * It is built from the address this instance is reached at, so the
+     * operator cannot work it out — the backend sends it.
+     *
+     * Null when the instance has no address a platform accepts: a local one
+     * is refused by every platform, and naming it would send the operator to
+     * register something that cannot work.
+     */
+    redirect_uri: string | null
 }
 
 /**

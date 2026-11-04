@@ -91,18 +91,21 @@ describe('ConnectionsGrid', () => {
         expect(wrapper.find('[data-test="connect-linkedin"]').exists()).toBe(true)
     })
 
-    it('shows no redirect URI and no copy button', () => {
-        // The setup instruction belongs in Settings → Plugins, where the
-        // operator configures the app id, the secret and the configuration id.
+    it('offers the setup guide for a provider that has no connection', async () => {
+        // The guide carries the instruction — where the credentials go and
+        // which URL to register — and the card only opens it.
         const wrapper = mountComponent(ConnectionsGrid, {
             connections: [makeConnection({ id: 1, provider: 'meta' })],
             config: CONFIG_PAYLOAD,
         })
 
-        expect(wrapper.find('[data-test="redirect-uri-linkedin"]').exists()).toBe(false)
-        expect(wrapper.find('[data-test="copy-redirect-uri-linkedin"]').exists()).toBe(false)
-        expect(wrapper.text()).not.toContain('/oauth/')
-        expect(wrapper.text()).not.toContain('redirect URI')
+        expect(wrapper.find('[data-test="setup-guide-linkedin"]').exists()).toBe(true)
+        // A provider that is connected has no card of its own.
+        expect(wrapper.find('[data-test="setup-guide-meta"]').exists()).toBe(false)
+
+        await wrapper.find('[data-test="setup-guide-linkedin"]').trigger('click')
+
+        expect(wrapper.emitted('guide')).toEqual([['linkedin']])
     })
 
     it('tells an unconfigured provider that it needs setup', () => {

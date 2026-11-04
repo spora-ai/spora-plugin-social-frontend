@@ -24,8 +24,8 @@ import type {
  *
  * The **providers** are entries, not flags: the client id is what the operator
  * registers with the platform, and `configured` says whether there is an app
- * id *and* a secret. The redirect URI is not among them — it belongs to the
- * configuration-id setting's own description in the admin settings.
+ * id *and* a secret. The **redirect URI** rides along: the accounts screen
+ * shows it so the operator can copy it into the platform's own form.
  *
  * `needs_setup` is the setup notice in the plugin's own wording: the plugin
  * emits it and the host translates it, so the frontend renders it as it comes.
@@ -42,12 +42,14 @@ export const CONFIG_PAYLOAD = {
             // The notice is sent exactly when the provider needs setup, and
             // `configured` is that same answer.
             needs_setup: null,
+            redirect_uri: 'https://spora.example.com/api/v1/plugins/social/oauth/meta/callback',
         },
         linkedin: {
             configured: true,
             client_id: 'spora-linkedin-app-id',
             config_id: null,
             needs_setup: null,
+            redirect_uri: 'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
         },
     },
     app_url: 'https://spora.example.com',
@@ -109,6 +111,9 @@ export const UNCONFIGURED_CONFIG_PAYLOAD = {
                 title: 'Meta integration needs setup',
                 body: 'Add the app id, the app secret and the configuration id in Settings → Plugins.',
             },
+            // The URL does not depend on the credentials: it is built from the
+            // address this instance is reached at.
+            redirect_uri: 'https://spora.example.com/api/v1/plugins/social/oauth/meta/callback',
         },
         linkedin: {
             configured: false,
@@ -118,6 +123,7 @@ export const UNCONFIGURED_CONFIG_PAYLOAD = {
                 title: 'LinkedIn integration needs setup',
                 body: 'Add the client id, the client secret and the requested permissions in Settings → Plugins.',
             },
+            redirect_uri: 'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
         },
     },
     app_url: 'https://spora.example.com',
