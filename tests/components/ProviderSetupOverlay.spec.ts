@@ -115,6 +115,14 @@ describe('ProviderSetupOverlay', () => {
         expect(wrapper.emitted('close')).toHaveLength(1)
     })
 
+    it('closes on Escape', async () => {
+        const wrapper = mountOverlay({ provider: 'meta', redirectUri: META_REDIRECT })
+
+        await wrapper.find('[data-test="setup-overlay"]').trigger('keydown', { key: 'Escape' })
+
+        expect(wrapper.emitted('close')).toHaveLength(1)
+    })
+
     it('falls back to the textarea when the clipboard refuses', async () => {
         // The clipboard API needs a secure context, which a development
         // install on plain HTTP is not.

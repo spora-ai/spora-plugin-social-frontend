@@ -77,6 +77,20 @@ function onBackdropClick(event: MouseEvent): void {
 }
 
 /**
+ * Escape closes the overlay.
+ *
+ * A modal `<dialog>` closes itself on Escape and fires `close` — but the
+ * close is handled here, so the operator's key cannot close the dialog
+ * without the screen knowing that it did.
+ */
+function onKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') return
+
+    event.preventDefault()
+    close()
+}
+
+/**
  * Put the redirect URL on the clipboard.
  *
  * `navigator.clipboard` needs a secure context, which a development install
@@ -124,6 +138,7 @@ async function copyRedirectUri(): Promise<void> {
         :aria-label="guide?.label"
         data-test="setup-overlay"
         @click="onBackdropClick"
+        @keydown="onKeydown"
         @close="close"
     >
         <div
