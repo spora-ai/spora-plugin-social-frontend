@@ -235,7 +235,7 @@ describe('AccountsPage', () => {
         expect(social.error).toContain('LinkedIn is not configured')
     })
 
-    it('shows no redirect URI — the setup instruction lives in the settings', async () => {
+    it('opens the setup guide with the redirect URL the backend sent', async () => {
         const pinia = createPinia()
 
         const router = makeRouter()
@@ -245,11 +245,64 @@ describe('AccountsPage', () => {
         const wrapper = mountPage(AccountsPage, pinia, router, contextWith(CONFIG_PAYLOAD, META_ONLY))
         await flushPromises()
 
-        expect(wrapper.find('[data-test="redirect-uri-linkedin"]').exists()).toBe(false)
-        expect(wrapper.find('[data-test="copy-redirect-uri-linkedin"]').exists()).toBe(false)
-        expect(wrapper.text()).not.toContain('/oauth/')
-        // The Connect button is still there.
-        expect(wrapper.find('[data-test="connect-linkedin"]').exists()).toBe(true)
+        // The guide is closed until it is asked for.
+        expect(wrapper.find('[data-test="setup-overlay"]').exists()).toBe(false)
+
+        await wrapper.find('[data-test="setup-guide-linkedin"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="setup-overlay"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="setup-overlay-redirect-uri"]').text()).toBe(
+            'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
+        )
+    })
+
+    it('says there is no redirect URL when the backend sent none', async () => {
+        const pinia = createPinia()
+
+        const router = makeRouter()
+        await router.push('/p/7/accounts')
+        await router.isReady()
+
+        // An instance with no address a platform accepts: the backend names no
+        // URL, so the guide must not invent one.
+        const config = {
+            ...CONFIG_PAYLOAD,
+            providers: {
+                ...CONFIG_PAYLOAD.providers,
+                linkedin: { ...CONFIG_PAYLOAD.providers.linkedin, redirect_uri: null },
+            },
+        }
+
+        const wrapper = mountPage(AccountsPage, pinia, router, contextWith(config, META_ONLY))
+        await flushPromises()
+
+        await wrapper.find('[data-test="setup-guide-linkedin"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="setup-overlay-redirect-uri"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="setup-overlay-no-redirect-uri"]').text()).toContain(
+            'no public address',
+        )
+    })
+
+    it('closes the setup guide again', async () => {
+        const pinia = createPinia()
+
+        const router = makeRouter()
+        await router.push('/p/7/accounts')
+        await router.isReady()
+
+        const wrapper = mountPage(AccountsPage, pinia, router, contextWith(CONFIG_PAYLOAD, META_ONLY))
+        await flushPromises()
+
+        await wrapper.find('[data-test="setup-guide-linkedin"]').trigger('click')
+        await flushPromises()
+
+        await wrapper.find('[data-test="setup-overlay-close"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="setup-overlay"]').exists()).toBe(false)
     })
 })
 

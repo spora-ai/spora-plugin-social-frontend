@@ -6,11 +6,18 @@
  * The connect flow is a task, not a place — nobody links to "the LinkedIn
  * connect dialog" — so it is a button here and a query the backend redirects
  * back with.
+ *
+ * **The setup guide is opened from here.** The app id, the secret and the
+ * configuration id live in Settings → Plugins, and the redirect URL has to be
+ * registered with the platform — so the screen carries an overlay that says
+ * where to go and shows the URL to copy.
  */
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import { RefreshCw } from 'lucide-vue-next'
 import ConnectionsGrid from '../components/ConnectionsGrid.vue'
+import ProviderSetupOverlay from '../components/ProviderSetupOverlay.vue'
 import { useSocialStore } from '../stores/social'
 import { needsAttention, providerLabel } from '../lib/providers'
 import type { Provider, SocialConnection } from '../types'
@@ -27,6 +34,21 @@ const principalId = computed(() => {
 
 /** The connections whose token will not publish until it is renewed. */
 const attention = computed(() => social.connections.filter((connection) => needsAttention(connection)))
+
+/** The provider whose guide is open, or null when none is. */
+const guideProvider = ref<Provider | null>(null)
+
+/**
+ * The redirect URL the open guide shows.
+ *
+ * It is the backend's — built from the address this instance is reached at —
+ * so it is read from the config rather than assembled here.
+ */
+const guideRedirectUri = computed(() => {
+    if (guideProvider.value === null) return null
+
+    return social.config?.providers[guideProvider.value]?.redirect_uri ?? null
+})
 
 onMounted(async () => {
     if (principalId.value === null) return
@@ -66,6 +88,19 @@ async function disconnect(connection: SocialConnection): Promise<void> {
     if (principalId.value === null) return
     await social.disconnectConnection(principalId.value, connection.id)
 }
+
+/**
+ * Open the guide for a provider.
+ *
+ * The URL it shows is the backend's, so the config is read before the overlay
+ * opens — a guide that opened without it would name no address and send the
+ * operator looking for one.
+ */
+async function openGuide(provider: Provider): Promise<void> {
+    await social.loadConfig()
+
+    guideProvider.value = provider
+}
 </script>
 
 <template>
@@ -76,6 +111,14 @@ async function disconnect(connection: SocialConnection): Promise<void> {
             @connect="connect"
             @refresh="refresh"
             @disconnect="disconnect"
+            @guide="openGuide"
+        />
+
+        <ProviderSetupOverlay
+            :open="guideProvider !== null"
+            :provider="guideProvider"
+            :redirect-uri="guideRedirectUri"
+            @close="guideProvider = null"
         />
 
         <section>

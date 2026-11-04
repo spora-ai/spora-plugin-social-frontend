@@ -95,14 +95,36 @@ describe('stores/social', () => {
         expect(result?.authorize_url).toBe('https://example.test/oauth')
     })
 
-    it('reads no redirect URI — the setup instruction lives in the settings', async () => {
+    it('reads the redirect URI the backend sent', async () => {
+        // The URL is built from the address this instance is reached at, so
+        // the operator cannot work it out — it travels with the config.
         get.mockResolvedValue(CONFIG_PAYLOAD)
         const store = useSocialStore()
 
         await store.loadConfig()
 
-        expect(store.config?.providers.linkedin).not.toHaveProperty('redirect_uri')
-        expect(store.config?.providers.meta).not.toHaveProperty('redirect_uri')
+        expect(store.config?.providers.linkedin.redirect_uri).toBe(
+            'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
+        )
+        expect(store.config?.providers.meta.redirect_uri).toBe(
+            'https://spora.example.com/api/v1/plugins/social/oauth/meta/callback',
+        )
+    })
+
+    it('reads no redirect URI when the backend sent none', async () => {
+        // An instance with no address a platform accepts has none to name.
+        get.mockResolvedValue({
+            ...CONFIG_PAYLOAD,
+            providers: {
+                ...CONFIG_PAYLOAD.providers,
+                linkedin: { ...CONFIG_PAYLOAD.providers.linkedin, redirect_uri: null },
+            },
+        })
+        const store = useSocialStore()
+
+        await store.loadConfig()
+
+        expect(store.config?.providers.linkedin.redirect_uri).toBeNull()
     })
 
     it('reads the rules the backend enforces', async () => {

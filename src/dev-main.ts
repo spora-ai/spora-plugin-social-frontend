@@ -42,6 +42,7 @@ const emptyApi = {
                             title: 'Meta integration needs setup',
                             body: 'Add the app id, the app secret and the configuration id in Settings → Plugins.',
                         },
+                        redirect_uri: 'http://localhost:5195/api/v1/plugins/social/oauth/meta/callback',
                     },
                     linkedin: {
                         configured: true,
@@ -51,6 +52,7 @@ const emptyApi = {
                             title: 'LinkedIn integration needs setup',
                             body: 'Add the client id, the client secret and the requested permissions in Settings → Plugins.',
                         },
+                        redirect_uri: 'http://localhost:5195/api/v1/plugins/social/oauth/linkedin/callback',
                     },
                 },
                 app_url: 'http://localhost:5195',
