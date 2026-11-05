@@ -29,7 +29,14 @@ export interface SocialAccount {
     external_id: string
     display_name: string
     username: string
-    followers: number
+    /**
+     * The account's audience — null when the platform does not report one.
+     *
+     * No platform reports an audience for a member account, and the backend
+     * sends null rather than a zero: an audience nobody counted is not an
+     * audience of none.
+     */
+    followers: number | null
     status: AccountStatus
     connected_at: string
     /**
