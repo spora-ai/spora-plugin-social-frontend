@@ -84,7 +84,10 @@ function linkedInGuide(): SetupGuide {
                 body: t('Register the redirect URL below with the app.'),
             },
             {
-                body: t('Add the Share on LinkedIn product. Posting as a member needs no review; posting to an organisation page needs the Community Management API.'),
+                body: t('Add the Share on LinkedIn product. Posting as a member needs no review — this app posts as the member who signed in.'),
+            },
+            {
+                body: t('Posting to an organisation page is a different app: the Community Management API has to be the only product on an app, so Share on LinkedIn blocks it. It also has to be asked for by a registered legal organisation — LinkedIn does not grant it to an individual.'),
             },
         ],
     }
