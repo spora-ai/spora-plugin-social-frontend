@@ -62,6 +62,19 @@ describe('ProviderSetupOverlay', () => {
         expect(text).toContain('Client ID')
     })
 
+    it('says that the page app is a second app', () => {
+        // One app cannot carry both halves: the Community Management API has
+        // to be the only product on an app, and "Share on LinkedIn" is one of
+        // the products that blocks it. And only a registered legal
+        // organisation may ask for it.
+        const wrapper = mountOverlay({ provider: 'linkedin', redirectUri: LINKEDIN_REDIRECT })
+
+        const text = wrapper.text()
+        expect(text).toContain('this app posts as the member who signed in')
+        expect(text).toContain('the Community Management API has to be the only product on an app')
+        expect(text).toContain('a registered legal organisation')
+    })
+
     it('links to the provider’s own console', () => {
         const wrapper = mountOverlay({ provider: 'meta', redirectUri: META_REDIRECT })
 
