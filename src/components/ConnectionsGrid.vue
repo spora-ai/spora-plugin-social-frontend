@@ -123,7 +123,7 @@ function setupNotice(provider: Provider): ProviderSetupNotice | null {
                         <div class="mt-1 truncate text-xs text-muted-foreground">
                             {{ account.username }} · {{ account.kind }}
                         </div>
-                        <div class="mt-2 text-xs text-muted-foreground">
+                        <div v-if="account.followers !== null" class="mt-2 text-xs text-muted-foreground">
                             {{ t('Audience') }}:
                             <span class="font-medium tabular-nums text-foreground">
                                 {{ account.followers.toLocaleString() }}

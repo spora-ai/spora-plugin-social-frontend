@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ConnectionsGrid from '../../src/components/ConnectionsGrid.vue'
 import { CONFIG_PAYLOAD, CONNECTIONS_PAYLOAD, UNCONFIGURED_CONFIG_PAYLOAD } from '../recorded'
-import { makeConnection } from '../fixtures'
+import { makeAccount, makeConnection } from '../fixtures'
 import { mountComponent } from '../mountPage'
 
 describe('ConnectionsGrid', () => {
@@ -81,6 +81,54 @@ describe('ConnectionsGrid', () => {
         const note = wrapper.find('[data-test="account-report-note-14"]')
         expect(note.exists()).toBe(true)
         expect(note.text()).toContain('Member posts report reactions only')
+    })
+
+    it('shows an account whose audience the platform never reported', () => {
+        // No platform reports an audience for a member account, and the
+        // backend sends null for it — null is "unknown", not zero. A card that
+        // counts it anyway throws while rendering, and the whole screen goes
+        // with it.
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: [
+                makeConnection({
+                    id: 5,
+                    provider: 'linkedin',
+                    accounts: [
+                        makeAccount({
+                            id: 21,
+                            platform: 'linkedin',
+                            kind: 'member',
+                            display_name: 'Fabian Graßl',
+                            username: 'mail@fabiangrassl.de',
+                            followers: null,
+                        }),
+                    ],
+                }),
+            ],
+            config: CONFIG_PAYLOAD,
+        })
+
+        const card = wrapper.find('[data-test="connection-5"]')
+        expect(card.find('[data-test="connection-account-21"]').exists()).toBe(true)
+        expect(card.text()).toContain('Fabian Graßl')
+        // Nothing is counted that was never reported.
+        expect(card.text()).not.toContain('Audience')
+    })
+
+    it('counts the audience of an account that has one', () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: [
+                makeConnection({
+                    id: 6,
+                    accounts: [makeAccount({ id: 22, followers: 4820 })],
+                }),
+            ],
+            config: CONFIG_PAYLOAD,
+        })
+
+        const card = wrapper.find('[data-test="connection-6"]')
+        expect(card.text()).toContain('Audience')
+        expect(card.text()).toContain('4,820')
     })
 
     it('asks to connect when the principal has nothing connected', () => {
