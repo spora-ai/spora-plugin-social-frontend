@@ -84,10 +84,6 @@ describe('ConnectionsGrid', () => {
     })
 
     it('shows an account whose audience the platform never reported', () => {
-        // No platform reports an audience for a member account, and the
-        // backend sends null for it — null is "unknown", not zero. A card that
-        // counts it anyway throws while rendering, and the whole screen goes
-        // with it.
         const wrapper = mountComponent(ConnectionsGrid, {
             connections: [
                 makeConnection({
@@ -111,7 +107,6 @@ describe('ConnectionsGrid', () => {
         const card = wrapper.find('[data-test="connection-5"]')
         expect(card.find('[data-test="connection-account-21"]').exists()).toBe(true)
         expect(card.text()).toContain('Fabian Graßl')
-        // Nothing is counted that was never reported.
         expect(card.text()).not.toContain('Audience')
     })
 

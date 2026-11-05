@@ -32,9 +32,7 @@ export function makeAccount(overrides: Partial<SocialAccount> = {}): SocialAccou
         external_id: 'urn:li:organization:412078',
         display_name: 'Fabeat GmbH',
         username: 'fabeat-gmbh',
-        // The backend sends null: no provider reads an audience, so there is
-        // none to report. A fixture that invents a number is a fixture the
-        // render is never tested against.
+        // The backend sends null — no provider reads an audience.
         followers: null,
         status: 'active',
         connected_at: '2026-10-20T08:12:00+00:00',
