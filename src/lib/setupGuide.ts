@@ -20,16 +20,12 @@ export interface SetupStep {
 
 /** Where the provider's app is created. */
 export interface SetupConsole {
-    /** The link's label. */
     label: string
-    /** The console's own address. */
     href: string
 }
 
 export interface SetupGuide {
-    /** The provider's developer console. */
     developerConsole: SetupConsole
-    /** The steps, in the order they are done. */
     steps: SetupStep[]
 }
 
