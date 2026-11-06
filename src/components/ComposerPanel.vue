@@ -45,6 +45,8 @@ import {
     composeText,
     DIRECT_ROUTE,
     mediaFit,
+    networkLabel,
+    networksOnTwoRoutes,
     parseHashtags,
     routeLabel,
 } from '../lib/platforms'
@@ -117,6 +119,22 @@ const targetedChannels = computed<Channel[]>(() => {
 
 /** The keys of the targeted channels — what the rules and the media strip read. */
 const targetedChannelKeys = computed(() => targetedChannels.value.map((channel) => channel.key))
+
+/**
+ * The networks the post reaches through two routes at once.
+ *
+ * The two accounts are different — a member profile and an organisation
+ * page, say — and the plugin cannot know they are the same page. So the
+ * composer says so and lets the operator go ahead.
+ */
+const twiceReached = computed(() => {
+    const networks = networksOnTwoRoutes(targetedChannels.value)
+
+    return networks.map((network) => ({
+        network,
+        label: networkLabel(network, social.rules),
+    }))
+})
 
 const targetSummary = computed(() => {
     const count = targetIds.value.length
@@ -946,6 +964,23 @@ async function submit(): Promise<void> {
                         >
                             {{ t('The platform limits could not be read, so they are not checked.') }}
                         </p>
+
+                        <div
+                            v-if="twiceReached.length > 0"
+                            class="rounded-lg border border-amber-500/50 px-2.5 py-2"
+                            data-test="two-routes-warning"
+                        >
+                            <p class="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                                {{
+                                    t('These networks are reached through two routes at once: {networks}.', {
+                                        networks: twiceReached.map((entry) => entry.label).join(', '),
+                                    })
+                                }}
+                            </p>
+                            <p class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                {{ t('The two accounts are different, so the post goes to both.') }}
+                            </p>
+                        </div>
 
                         <div
                             v-for="preview in previews"

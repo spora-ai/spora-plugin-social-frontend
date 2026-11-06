@@ -127,6 +127,44 @@ describe('ComposerPanel — the writing surface', () => {
         expect(preview.text()).not.toContain('Over the limit')
     })
 
+    it('warns that a network is reached through two routes, and lets it go ahead', async () => {
+        // A member profile and an organisation page are two accounts, and
+        // the plugin cannot know they are the same page — posting to both is
+        // sometimes exactly what the operator meant.
+        const { wrapper, social } = mountComposer()
+        social.connections = [
+            makeConnection({
+                accounts: [makeAccount({ id: 12, platform: 'linkedin', via: 'direct' })],
+            }),
+            makeConnection({
+                id: 2,
+                provider: 'zernio',
+                accounts: [makeAccount({ id: 41, platform: 'linkedin', via: 'zernio' })],
+            }),
+        ]
+        await wrapper.vm.$nextTick()
+
+        await wrapper.find('[data-test="target-12"]').setValue(true)
+        await wrapper.find('[data-test="target-41"]').setValue(true)
+        await wrapper.find('#cmp-body').setValue('We shipped…')
+        await flushPromises()
+
+        const warning = wrapper.find('[data-test="two-routes-warning"]')
+        expect(warning.exists()).toBe(true)
+        expect(warning.text()).toContain('LinkedIn')
+        // It is a warning, not a refusal: the post still goes out.
+        expect(wrapper.find('[data-test="composer-submit"]').attributes('disabled')).toBeUndefined()
+    })
+
+    it('says nothing when each network is reached through one route', async () => {
+        const { wrapper } = mountComposer()
+
+        await compose(wrapper)
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="two-routes-warning"]').exists()).toBe(false)
+    })
+
     it('counts the accounts the operator picked', async () => {
         const { wrapper } = mountComposer()
 
