@@ -5,11 +5,11 @@ set -u
 cd "$(dirname "$0")/.."
 
 BACKUP=$(mktemp -d)
-cp -R src tests "$BACKUP/"
+cp -R src tests scripts "$BACKUP/"
 
 restore() {
-    rm -rf src tests
-    cp -R "$BACKUP/src" "$BACKUP/tests" .
+    rm -rf src tests scripts
+    cp -R "$BACKUP/src" "$BACKUP/tests" "$BACKUP/scripts" .
 }
 
 replace() {
@@ -134,6 +134,19 @@ check "the calendar folds the channels" src/components/CalendarGrid.vue \
   'return uniqueChannels(post.channels)' \
   'return post.channels' \
   tests/components/CalendarGrid.spec.ts
+
+# 70. "Aggregator" is a house word, so the gate does not call it an
+# untranslated placeholder.
+check "the house word is exempt" scripts/i18n.mjs \
+  "    'Aggregator'," \
+  '' \
+  tests/i18n.spec.ts
+
+# 71. The German catalogue keeps the house word as it is.
+check "the german catalogue keeps the house word" src/locales/de.json \
+  '"Aggregator": "Aggregator"' \
+  '"Aggregator": "Aggregator-Dienst"' \
+  tests/i18n.spec.ts
 
 
 # 10. The theme toggle writes the persisted value.
@@ -442,14 +455,6 @@ check "refresh stays on a token that expires" src/components/ConnectionsGrid.vue
   '                        v-if="false"' \
   tests/components/ConnectionsGrid.spec.ts
 
-                    <code>/api/v1/plugins/social/oauth/linkedin/callback</code>
-                    <button type="button" data-test="copy-redirect-uri-linkedin">Copy</button>
-                </div>
-                <!-- The setup instruction names what is missing and where to add' \
-  tests/components/ConnectionsGrid.spec.ts
-
-
-
 # 59. The server's setup message surfaces; the client does not refuse it itself.
 check "the server's message surfaces" src/pages/AccountsPage.vue \
   '    const result = await social.connectProvider(principalId.value, provider)' \
@@ -459,11 +464,11 @@ check "the server's message surfaces" src/pages/AccountsPage.vue \
     const result = await social.connectProvider(principalId.value, provider)' \
   tests/pages/AccountsPage.spec.ts
 
-# 60. The frontend reads no redirect_uri from the config.
-check "no redirect uri is read" src/api/social.ts \
-  '        config_id: entry?.config_id ?? null,' \
-  '        config_id: entry?.config_id ?? null,
-        redirect_uri: entry?.redirect_uri ?? null,' \
+# 60. The frontend reads the redirect_uri the backend sent — the setup guide
+# names it, and the operator cannot work it out.
+check "the redirect uri is read" src/api/social.ts \
+  '        redirect_uri: entry?.redirect_uri ?? null,' \
+  '        redirect_uri: null,' \
   tests/stores/social.spec.ts
 
 # 58. The setup card renders the backend's wording.
