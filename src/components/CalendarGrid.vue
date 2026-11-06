@@ -93,7 +93,7 @@ const cells = computed(() => {
             today: key === today,
             posts: props.posts.filter((post) => {
                 const when = post.scheduled_for ?? post.published_at
-                return when !== null && when !== undefined && when.slice(0, 10) === key
+                return when?.slice(0, 10) === key
             }),
         })
     }

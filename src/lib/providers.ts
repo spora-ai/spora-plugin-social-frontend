@@ -34,7 +34,7 @@ export function isNativeProvider(provider: string): provider is Provider {
  * A provider the plugin does not know falls back to its own name: an
  * aggregator's slug is a route, and the screen names it from the config.
  */
-export function providerLabel(provider: Provider | string): string {
+export function providerLabel(provider: string): string {
     return isNativeProvider(provider) ? PROVIDER_LABELS[provider] : provider
 }
 

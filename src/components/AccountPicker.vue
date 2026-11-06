@@ -17,7 +17,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { brandColorVar, channelKey, DIRECT_ROUTE, networkLabel, routeLabel } from '../lib/platforms'
-import type { Network, Route, SocialAccount, SocialConfig } from '../types'
+import type { SocialAccount, SocialConfig } from '../types'
 
 const props = defineProps<{
     /** The accounts to choose from. */
@@ -65,7 +65,7 @@ function isOffered(account: SocialAccount): boolean {
  * The plugin's own route has a name of its own; an aggregator's is the name
  * the operator knows it by, which the backend sends.
  */
-function labelOfRoute(via: Route): string {
+function labelOfRoute(via: string): string {
     return routeLabel(via, props.config?.aggregators ?? {})
 }
 
@@ -77,7 +77,7 @@ function labelOfRoute(via: Route): string {
  * directly are the ones they see first.
  */
 const groups = computed(() => {
-    const byRoute = new Map<Route, SocialAccount[]>()
+    const byRoute = new Map<string, SocialAccount[]>()
 
     for (const account of props.accounts) {
         if (!isOffered(account)) continue
@@ -101,7 +101,7 @@ const groups = computed(() => {
 })
 
 /** The name of the network an account is on. */
-function labelFor(network: Network): string {
+function labelFor(network: string): string {
     return networkLabel(network, rules.value)
 }
 

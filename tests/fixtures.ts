@@ -10,11 +10,9 @@ import type { ApiError } from '../src/api/client'
 import type { Principal } from '../src/api/principals'
 import type {
     ComposerAttachment,
-    Network,
     PostMedia,
     PostMetrics,
     PostTarget,
-    Route,
     SocialAccount,
     SocialConnection,
     SocialPost,
@@ -152,10 +150,10 @@ export function makeAttachment(overrides: Partial<ComposerAttachment> = {}): Com
 }
 
 /** The networks the plugin reaches on its own route. */
-export const NATIVE_NETWORKS: Network[] = ['linkedin', 'facebook', 'instagram']
+export const NATIVE_NETWORKS: string[] = ['linkedin', 'facebook', 'instagram']
 
 /** The plugin's own route to a network. */
-export const DIRECT_ROUTE: Route = 'direct'
+export const DIRECT_ROUTE: string = 'direct'
 
 /**
  * The error the host's client throws.

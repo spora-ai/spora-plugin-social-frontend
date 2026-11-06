@@ -8,32 +8,25 @@
  */
 
 /**
- * The network a post goes to.
- *
- * A plain string, and deliberately so: the set is open. The plugin reaches
- * three networks on its own and reaches the rest through an aggregator, and
- * the aggregator's list grows without the frontend's knowledge.
- */
-export type Network = string
-
-/**
- * The route to a network — the plugin's own APIs, or an aggregator's.
- *
- * `direct` is the plugin's own route; an aggregator's slug is its own.
- */
-export type Route = string
-
-/**
  * A network, and the route to it.
  *
  * The pair is the identity: the same network reached through two routes is
  * two accounts with two tokens, and each has its own limits.
+ *
+ * **Both axes are plain strings.** Their sets are open — the plugin reaches
+ * three networks on its own and reaches the rest through an aggregator,
+ * whose list grows without the frontend's knowledge — so a `Network` type
+ * would be `string` under a second name, and TypeScript would tell the two
+ * axes apart no better than it does now. The names live in the fields and
+ * in the docblocks.
  */
 export interface Channel {
     /** The channel's key — the route, then the network. */
     key: string
-    network: Network
-    via: Route
+    /** The network the channel reaches. */
+    network: string
+    /** The route to it — the plugin's own, or an aggregator's. */
+    via: string
 }
 
 export type AccountKind = 'organization' | 'page' | 'member' | 'business' | 'aggregator'
@@ -52,9 +45,9 @@ export interface SocialAccount {
     /** The same id under its own name — the backend sends both. */
     account_id: number
     /** The network the account is on. */
-    platform: Network
+    platform: string
     /** The route to it — the plugin's own, or an aggregator's. */
-    via: Route
+    via: string
     kind: AccountKind
     external_id: string
     display_name: string
@@ -97,8 +90,12 @@ export interface SocialConnection {
      *
      * An OAuth provider for a login, an aggregator's slug for a key — and an
      * aggregator's slug is also the route its accounts publish through.
+     *
+     * A plain string, because the two kinds share one field: the plugin's
+     * own providers are a closed set ({@see Provider}) and an aggregator's
+     * slug is whatever the aggregator calls itself.
      */
-    provider: Provider | string
+    provider: string
     /** The portfolio the connection belongs to — Meta's client business id. */
     business_external_id: string | null
     /** Meta's configuration id; null where the platform has none. */
@@ -149,9 +146,9 @@ export interface PostTarget {
     id: number
     account_id: number
     /** The network the target went to. */
-    platform: Network
+    platform: string
     /** The route it went through. */
-    via: Route
+    via: string
     status: TargetStatus
     external_id: string | null
     external_url: string | null
@@ -186,9 +183,9 @@ export interface PostMedia {
 export interface PostAccountSummary {
     id: number
     /** The network the account is on. */
-    platform: Network
+    platform: string
     /** The route to it. */
-    via: Route
+    via: string
     display_name: string
 }
 
@@ -292,7 +289,7 @@ export interface AnalyticsTotals {
 
 export interface NetworkTotals extends AnalyticsTotals {
     /** The network the numbers are about. */
-    platform: Network
+    platform: string
     /**
      * The channel's key — the route, then the network.
      *
@@ -302,7 +299,7 @@ export interface NetworkTotals extends AnalyticsTotals {
      */
     channel: string
     /** The route the numbers came through. */
-    via: Route
+    via: string
     posts: number
 }
 
@@ -320,9 +317,9 @@ export interface AnalyticsPoint {
 export interface TopPost {
     post_id: number
     title: string
-    platform: Network
+    platform: string
     /** The route the post went out through. */
-    via: Route
+    via: string
     /** Null when the network reported no reach for this post. */
     reach: number | null
     /** Null when the network reported no impressions for this post. */
@@ -367,8 +364,8 @@ export interface MediaAssetSummary {
 export interface MediaFitResult {
     /** The channel's key — the route, then the network. */
     channel: string
-    network: Network
-    via: Route
+    network: string
+    via: string
     fits: boolean
     reasons: string[]
     remedy: string | null
@@ -442,9 +439,9 @@ export interface PlatformRules {
     /** The network's own name, as the operator knows it. */
     label: string
     /** The network the rule is about. */
-    network: Network
+    network: string
     /** The route to it. */
-    via: Route
+    via: string
     /** The network cannot publish a post without media. */
     media_required: boolean
     /** How many attachments a post may carry. */
@@ -529,7 +526,7 @@ export type NativeNetwork = 'linkedin' | 'facebook' | 'instagram'
 export interface PostQuery {
     status?: string
     /** The network to filter by. */
-    platform?: Network
+    platform?: string
     account_id?: number
     limit?: number
     offset?: number
@@ -574,8 +571,8 @@ export interface ComposerAttachment {
 export interface PostAnalyticsTarget {
     target_id: number
     account_id: number
-    platform: Network
-    via: Route
+    platform: string
+    via: string
     status: TargetStatus
     external_id: string | null
     metrics: PostMetrics | null

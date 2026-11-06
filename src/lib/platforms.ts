@@ -14,7 +14,7 @@
  * the channel's identity.
  */
 import { t } from '../i18n'
-import type { AggregatorConfig, Channel, Network, PlatformRules, Route } from '../types'
+import type { AggregatorConfig, Channel, PlatformRules } from '../types'
 
 /** The rules, keyed by the channel's key. */
 export type ChannelRules = Record<string, PlatformRules>
@@ -29,7 +29,7 @@ export const DIRECT_ROUTE = 'direct'
  * the operator knows it by, which the backend sends with the config — so
  * the route reads as a product and not as a category.
  */
-export function routeLabel(via: Route, aggregators: Record<string, AggregatorConfig>): string {
+export function routeLabel(via: string, aggregators: Record<string, AggregatorConfig>): string {
     if (via === DIRECT_ROUTE) return t('Direct')
     return aggregators[via]?.label ?? via
 }
@@ -40,12 +40,12 @@ export function routeLabel(via: Route, aggregators: Record<string, AggregatorCon
  * The two parts are normalised the way the backend normalises them, so a key
  * the frontend builds is the key the backend looks a rule up by.
  */
-export function channelKey(via: Route, network: Network): string {
+export function channelKey(via: string, network: string): string {
     return `${normalise(via)}:${normalise(network)}`
 }
 
 /** The channel a route and a network name. */
-export function channelOf(via: Route, network: Network): Channel {
+export function channelOf(via: string, network: string): Channel {
     return {
         key: channelKey(via, network),
         network: normalise(network),
@@ -113,7 +113,7 @@ function networkLabels(rules: ChannelRules): Record<string, string> {
     const labels: Record<string, string> = {}
 
     for (const rule of Object.values(rules)) {
-        if (labels[rule.network] === undefined) labels[rule.network] = rule.label
+        labels[rule.network] ??= rule.label
     }
 
     return labels
@@ -126,7 +126,7 @@ function networkLabels(rules: ChannelRules): Record<string, string> {
  * network with no rule falls back to its own name, which is the best a
  * screen can say about a network the plugin does not offer.
  */
-export function networkLabel(network: Network, rules: ChannelRules): string {
+export function networkLabel(network: string, rules: ChannelRules): string {
     return networkLabels(rules)[network] ?? network
 }
 
@@ -138,11 +138,11 @@ export function networkLabel(network: Network, rules: ChannelRules): string {
  * operator go ahead. Posting to a member profile *and* an organisation page
  * is a thing an operator means.
  */
-export function networksOnTwoRoutes(channels: Channel[]): Network[] {
-    const routes = new Map<Network, Set<Route>>()
+export function networksOnTwoRoutes(channels: Channel[]): string[] {
+    const routes = new Map<string, Set<string>>()
 
     for (const channel of channels) {
-        const seen = routes.get(channel.network) ?? new Set<Route>()
+        const seen = routes.get(channel.network) ?? new Set<string>()
         seen.add(channel.via)
         routes.set(channel.network, seen)
     }
@@ -161,7 +161,7 @@ export function networksOnTwoRoutes(channels: Channel[]): Network[] {
  * `tests/lib/platforms.spec.ts` checks this list against the stylesheet: a
  * name here with no variable there renders an invisible chip.
  */
-const NETWORKS_WITH_A_COLOUR: Network[] = ['linkedin', 'facebook', 'instagram']
+const NETWORKS_WITH_A_COLOUR = new Set(['linkedin', 'facebook', 'instagram'])
 
 /**
  * How much lighter an aggregator's route is than the plugin's own.
@@ -182,11 +182,11 @@ const AGGREGATOR_LIGHTNESS = 8
  * come out of the same hash, so two networks whose hues happen to agree
  * still differ in the chip and in the bar.
  */
-function networkColour(network: Network): { hue: number; saturation: number; lightness: number } {
+function networkColour(network: string): { hue: number; saturation: number; lightness: number } {
     let hash = 0x811c9dc5
 
-    for (let index = 0; index < network.length; index += 1) {
-        hash ^= network.charCodeAt(index)
+    for (const character of network) {
+        hash ^= character.codePointAt(0) ?? 0
         hash = Math.imul(hash, 0x01000193) >>> 0
     }
 
@@ -218,7 +218,7 @@ export function chartColorVar(channel: Channel): string {
     const network = channel.network
     const shift = channel.via === DIRECT_ROUTE ? 0 : AGGREGATOR_LIGHTNESS
 
-    if (NETWORKS_WITH_A_COLOUR.includes(network)) {
+    if (NETWORKS_WITH_A_COLOUR.has(network)) {
         const variable = `var(--chart-${network})`
 
         if (shift === 0) return `hsl(${variable})`
@@ -235,8 +235,8 @@ export function chartColorVar(channel: Channel): string {
 }
 
 /** The network brand hue — a chip accent, never a chart series. */
-export function brandColorVar(network: Network): string {
-    if (NETWORKS_WITH_A_COLOUR.includes(network)) return `hsl(var(--platform-${network}))`
+export function brandColorVar(network: string): string {
+    if (NETWORKS_WITH_A_COLOUR.has(network)) return `hsl(var(--platform-${network}))`
 
     const { hue, saturation, lightness } = networkColour(network)
 
