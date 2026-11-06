@@ -90,33 +90,101 @@ export function postChannels(post: SocialPost): Channel[] {
  * A top post's row, with the key it is rendered under.
  */
 export interface TopPostRow extends TopPost {
-    /** The post, the route and the network — the three the row is folded by. */
+    /** The target the row is about — or the post and its channel. */
     key: string
 }
 
 /**
- * The top posts, one row per post and channel.
+ * The key a top post's row is rendered under.
  *
- * **The backend's rows are one per reading, not one per post.** The daily
- * collector writes a row per day, so a post on one account arrives once per
- * day in the window — up to thirty rows for the same post, each with its own
- * reach. The rows are folded by the post, the route and the network, and the
- * first of them is the one kept: the backend sorts them by reach, so it is
- * the reading that reached the most people.
+ * **The target's id, when the row carries one.** The backend's rows are one
+ * per target, so two accounts of the same channel on one post are two rows
+ * and only the target's id tells them apart.
  *
- * The key is those same three, so two rows can never wear the same key —
- * and the row that was first keeps its key when the list is re-ordered.
+ * **The post, the route and the network, when it does not.** A backend that
+ * sends no target id sends one row per reading instead, and those are folded
+ * by the three every reading of that post shares.
+ *
+ * **The two cannot collide.** One key begins with `target:` and the other
+ * with `post:`, so a target id can never be mistaken for a post — and a row
+ * that carries a target id and a row that does not are two rows, each with
+ * a key of its own.
+ */
+function topPostKey(post: TopPost): string {
+    return typeof post.target_id === 'number'
+        ? `target:${post.target_id}`
+        : `post:${post.post_id}:${post.via}:${post.platform}`
+}
+
+/**
+ * The top posts, one row per target.
+ *
+ * **The backend's rows are one per target.** A post on two accounts is two
+ * rows — the same post, the same title, two sets of numbers — and the
+ * target's id is what tells them apart. Two rows that carry the same target
+ * id are one reading sent twice, and the first of them is the one kept: the
+ * backend sorts them by reach, so it is the reading that reached the most
+ * people.
+ *
+ * A backend that sends no target id sends a row per reading instead, and
+ * those are folded by the post, the route and the network.
+ *
+ * The key is the target, so two rows can never wear the same key — and the
+ * row that was first keeps its key when the list is re-ordered.
  */
 export function topPostRows(posts: TopPost[]): TopPostRow[] {
     const rows: TopPostRow[] = []
     const seen = new Set<string>()
 
     for (const post of posts) {
-        const key = `${post.post_id}:${post.via}:${post.platform}`
+        const key = topPostKey(post)
         if (seen.has(key)) continue
         seen.add(key)
         rows.push({ ...post, key })
     }
 
     return rows
+}
+
+/**
+ * A post in the top posts, with the rows that belong to it.
+ */
+export interface TopPostGroup {
+    /** The post's id. */
+    post_id: number
+    title: string
+    /** The key the post is rendered under. */
+    key: string
+    /** The rows — one per target, in the order the backend sent them. */
+    rows: TopPostRow[]
+}
+
+/**
+ * The top posts, grouped by the post they belong to.
+ *
+ * The backend's rows are one per target, so a post that went to two places
+ * arrives twice — and the two rows are **one post going to two places**, not
+ * two posts. The group is what says so: the rows hang under one title, so
+ * the operator reads the post once and the places once each.
+ */
+export function topPostGroups(posts: TopPost[]): TopPostGroup[] {
+    const groups = new Map<number, TopPostGroup>()
+
+    for (const row of topPostRows(posts)) {
+        const group = groups.get(row.post_id)
+
+        if (group === undefined) {
+            groups.set(row.post_id, {
+                post_id: row.post_id,
+                title: row.title,
+                key: `post:${row.post_id}`,
+                rows: [row],
+            })
+            continue
+        }
+
+        group.rows.push(row)
+    }
+
+    return [...groups.values()]
 }

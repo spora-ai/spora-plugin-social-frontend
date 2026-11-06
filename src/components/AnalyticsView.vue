@@ -18,6 +18,9 @@
  *    series carry their own colours — and the legend swatches use those too,
  *    because a legend that does not match the bar it labels is worse than no
  *    legend.
+ *  - **A post that went to two places is one post.** The backend's rows are
+ *    one per target, so the top posts table names the post once and gives
+ *    each place it reached a row of its own, with that place's numbers.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -29,7 +32,7 @@ import {
     networkLabel,
     routeLabel,
 } from '../lib/platforms'
-import { formatCounter, topPostRows } from '../lib/metrics'
+import { formatCounter, topPostGroups } from '../lib/metrics'
 import { NO_VALUE } from '../lib/format'
 import type { AnalyticsPoint, AnalyticsSummary, Channel, NetworkTotals, SocialConfig } from '../types'
 
@@ -47,12 +50,13 @@ const rows = computed<NetworkTotals[]>(() => props.summary?.by_network ?? [])
 const series = computed(() => props.summary?.series ?? [])
 
 /**
- * The top posts, one row per post and channel.
+ * The top posts, grouped by the post they belong to.
  *
- * The backend's rows are one per metric reading, so the same post arrives
- * once per day — folded here, so the operator reads one post once.
+ * The backend's rows are one per target, so a post that went to two places
+ * arrives twice — and the two rows are one post going to two places, not
+ * two posts. The group is what says so.
  */
-const topPosts = computed(() => topPostRows(props.summary?.top_posts ?? []))
+const topPosts = computed(() => topPostGroups(props.summary?.top_posts ?? []))
 
 const rules = computed(() => props.config?.rules ?? {})
 
@@ -347,39 +351,72 @@ function height(day: AnalyticsPoint): number {
             <div v-if="topPosts.length > 0">
                 <h2 class="mb-3 text-sm font-semibold">{{ t('Top posts') }}</h2>
                 <div class="surface-card overflow-hidden">
-                    <table class="w-full text-sm">
+                    <table class="w-full text-sm" data-test="top-posts-table">
                         <thead>
                             <tr class="border-b border-border bg-muted/40 text-left">
                                 <th class="px-3 py-2 font-medium text-muted-foreground">{{ t('Post') }}</th>
+                                <th class="px-3 py-2 font-medium text-muted-foreground">{{ t('Channel') }}</th>
                                 <th class="px-3 py-2 text-right font-medium text-muted-foreground">{{ t('Reach') }}</th>
                                 <th class="px-3 py-2 text-right font-medium text-muted-foreground">{{ t('Likes') }}</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <!--
+                            One tbody per post: the title spans the post's rows,
+                            so a post that reached two places reads as one post
+                            and the rows under the title are the places.
+                        -->
+                        <tbody
+                            v-for="group in topPosts"
+                            :key="group.key"
+                            class="border-b border-border last:border-b-0"
+                        >
                             <tr
-                                v-for="post in topPosts"
-                                :key="post.key"
-                                class="border-b border-border last:border-b-0 transition-colors hover:bg-muted/30"
+                                v-for="(row, index) in group.rows"
+                                :key="row.key"
+                                class="transition-colors hover:bg-muted/30"
+                                :data-test="`top-post-${row.key}`"
                             >
-                                <td class="px-3 py-2.5">
-                                    <div class="font-medium">{{ post.title }}</div>
-                                    <div class="mt-0.5 text-[11px] text-muted-foreground">
-                                        {{ networkLabel(post.platform, rules) }}
-                                        <span class="opacity-70" :data-test="`top-post-route-${post.post_id}`">{{ routeLabel(post.via, aggregators) }}</span>
-                                    </div>
+                                <td
+                                    v-if="index === 0"
+                                    :rowspan="group.rows.length"
+                                    class="px-3 py-2.5 align-top font-medium"
+                                    :data-test="`top-post-title-${group.post_id}`"
+                                >
+                                    {{ group.title }}
+                                </td>
+                                <td class="px-3 py-2.5 align-top">
+                                    <span class="inline-flex items-center gap-1">
+                                        <span
+                                            class="platform-chip"
+                                            :data-network="row.platform"
+                                            :style="{ '--network-color': brandColorVar(row.platform) }"
+                                        >
+                                            {{ networkLabel(row.platform, rules) }}
+                                        </span>
+                                        <span
+                                            class="text-[10px] text-muted-foreground"
+                                            :data-test="`top-post-route-${row.key}`"
+                                        >
+                                            {{ routeLabel(row.via, aggregators) }}
+                                        </span>
+                                    </span>
                                 </td>
                                 <td
-                                    class="px-3 py-2.5 text-right tabular-nums"
-                                    :data-test="`top-post-reach-${post.post_id}`"
+                                    class="px-3 py-2.5 text-right align-top tabular-nums"
+                                    :data-test="`top-post-reach-${row.key}`"
                                 >
-                                    {{ formatCounter(post.reach) }}
+                                    {{ formatCounter(row.reach) }}
                                 </td>
-                                <td class="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
-                                    {{ formatCounter(post.likes) }}
+                                <td class="px-3 py-2.5 text-right align-top tabular-nums text-muted-foreground">
+                                    {{ formatCounter(row.likes) }}
                                 </td>
                             </tr>
                         </tbody>
                     </table>
+
+                    <p class="border-t border-border px-3 py-2 text-[11px] text-muted-foreground" data-test="top-post-caveat">
+                        {{ t('The backend sends one row per target, so a post that reached two places is one post with a row for each place — the numbers are each place’s own.') }}
+                    </p>
                 </div>
             </div>
         </template>

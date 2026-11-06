@@ -165,6 +165,7 @@
   "The agent writes the post and saves it as a draft. You find it in Posts, where you can edit it and publish it.": "Der Agent schreibt den Beitrag und speichert ihn als Entwurf. Sie finden ihn unter Beiträge, wo Sie ihn bearbeiten und veröffentlichen können.",
   "The agents could not be read.": "Die Agenten konnten nicht gelesen werden.",
   "The app id and the secret belong to this instance, not to the account — one pair serves every account that connects.": "Die App-ID und das Secret gehören zu dieser Instanz, nicht zu dem Konto — ein Paar genügt für jedes Konto, das sich verbindet.",
+  "The backend sends one row per target, so a post that reached two places is one post with a row for each place — the numbers are each place’s own.": "Das Backend sendt eine Zeile pro Ziel — ein Beitrag, der zwei Orte erreicht hat, ist ein Beitrag mit einer Zeile pro Ort, und die Zahlen sind die des jeweiligen Ortes.",
   "The key is forgotten. The accounts stay in {aggregator} — remove them there if you do not want them published to any more.": "Der Schlüssel ist vergessen. Die Konten bleiben in {aggregator} — entfernen Sie sie dort, wenn sie nicht mehr veröffentlicht werden sollen.",
   "The key is saved.": "Der Schlüssel ist gespeichert.",
   "The media does not fit this network": "Die Medien passen nicht zu diesem Netzwerk",

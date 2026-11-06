@@ -317,6 +317,18 @@ export interface AnalyticsPoint {
 export interface TopPost {
     post_id: number
     title: string
+    /**
+     * The target the row is about — **absent when the backend sends no
+     * target id**.
+     *
+     * The backend's rows are one per target, so the id is what tells two
+     * accounts of the same channel on one post apart. It is optional because
+     * **the plugin is released before the frontend**: a released frontend may
+     * run against an older plugin release, and that one sends a row per
+     * reading with no target to name. The frontend folds such a row by the
+     * post, the route and the network instead.
+     */
+    target_id?: number
     platform: string
     /** The route the post went out through. */
     via: string

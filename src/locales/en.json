@@ -165,6 +165,7 @@
   "The agent writes the post and saves it as a draft. You find it in Posts, where you can edit it and publish it.": "The agent writes the post and saves it as a draft. You find it in Posts, where you can edit it and publish it.",
   "The agents could not be read.": "The agents could not be read.",
   "The app id and the secret belong to this instance, not to the account — one pair serves every account that connects.": "The app id and the secret belong to this instance, not to the account — one pair serves every account that connects.",
+  "The backend sends one row per target, so a post that reached two places is one post with a row for each place — the numbers are each place’s own.": "The backend sends one row per target, so a post that reached two places is one post with a row for each place — the numbers are each place’s own.",
   "The key is forgotten. The accounts stay in {aggregator} — remove them there if you do not want them published to any more.": "The key is forgotten. The accounts stay in {aggregator} — remove them there if you do not want them published to any more.",
   "The key is saved.": "The key is saved.",
   "The media does not fit this network": "The media does not fit this network",

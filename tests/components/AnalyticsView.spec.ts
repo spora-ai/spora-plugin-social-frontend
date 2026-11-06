@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { DOMWrapper } from '@vue/test-utils'
 import AnalyticsView from '../../src/components/AnalyticsView.vue'
-import { CONFIG_PAYLOAD, SUMMARY_PAYLOAD, TWO_ROUTE_SUMMARY_PAYLOAD } from '../recorded'
+import { CONFIG_PAYLOAD, SUMMARY_PAYLOAD, TWO_ROUTE_SUMMARY_PAYLOAD, TWO_TARGETS_SUMMARY_PAYLOAD } from '../recorded'
 import { mountComponent } from '../mountPage'
 
 /**
@@ -113,8 +113,8 @@ describe('AnalyticsView', () => {
     it('shows a dash for a top post whose reach was never reported', () => {
         const wrapper = mountComponent(AnalyticsView, { summary: SUMMARY_PAYLOAD })
 
-        expect(wrapper.find('[data-test="top-post-reach-89"]').text()).toBe('—')
-        expect(wrapper.find('[data-test="top-post-reach-88"]').text()).toBe('4,820')
+        expect(wrapper.find('[data-test="top-post-reach-target:502"]').text()).toBe('—')
+        expect(wrapper.find('[data-test="top-post-reach-target:501"]').text()).toBe('4,820')
     })
 
     it('counts a day whose series omits a platform, instead of printing NaN', () => {
@@ -202,6 +202,23 @@ describe('AnalyticsView', () => {
         expect(wrapper.find('[data-test="network-row-direct:linkedin"]').text()).toContain('0.0%')
     })
 
+    it('reads a target once, not once per reading', () => {
+        // A backend that sends no target id sends one row per metric
+        // reading — the daily collector writes a row per day — so the same
+        // post arrives ten times with a different reach each.
+        const readings = Array.from({ length: 10 }, (_, day) => ({
+            ...SUMMARY_PAYLOAD.top_posts[0]!,
+            target_id: undefined,
+            reach: 4820 - day,
+        }))
+
+        const wrapper = mountComponent(AnalyticsView, {
+            summary: { ...SUMMARY_PAYLOAD, top_posts: readings },
+        })
+
+        expect(wrapper.findAll('[data-test="top-posts-table"] tbody tr')).toHaveLength(1)
+    })
+
     it('names the columns of the top posts table', () => {
         const wrapper = mountComponent(AnalyticsView, { summary: SUMMARY_PAYLOAD })
 
@@ -211,20 +228,12 @@ describe('AnalyticsView', () => {
         expect(headers.map((header) => header.text())).toContain('Post')
     })
 
-    it('reads a post once, not once per reading', () => {
-        // The backend's rows are one per metric reading — the daily
-        // collector writes a row per day — so the same post arrives ten
-        // times with a different reach each.
-        const readings = Array.from({ length: 10 }, (_, day) => ({
-            ...SUMMARY_PAYLOAD.top_posts[0]!,
-            reach: 4820 - day,
-        }))
+    it('says what a row of the top posts is', () => {
+        const wrapper = mountComponent(AnalyticsView, { summary: SUMMARY_PAYLOAD })
 
-        const wrapper = mountComponent(AnalyticsView, {
-            summary: { ...SUMMARY_PAYLOAD, top_posts: readings },
-        })
-
-        expect(wrapper.findAll('[data-test="top-post-reach-88"]')).toHaveLength(1)
+        // The backend sends one row per target, and the operator has to know
+        // that the numbers belong to one place the post reached.
+        expect(wrapper.find('[data-test="top-post-caveat"]').text()).toContain('one row per target')
     })
 })
 
@@ -336,6 +345,80 @@ describe('AnalyticsView — two routes to one network', () => {
         })
 
         // The same post on two routes is two rows, and each says which.
-        expect(wrapper.find('[data-test="top-post-route-88"]').text()).toBe('Direct')
+        expect(wrapper.find('[data-test="top-post-route-target:501"]').text()).toBe('Direct')
+        expect(wrapper.find('[data-test="top-post-route-target:503"]').text()).toBe('Zernio')
+    })
+})
+
+describe('AnalyticsView — one post, two places', () => {
+    it('names the post once, however many places it reached', () => {
+        const wrapper = mountComponent(AnalyticsView, {
+            summary: TWO_ROUTE_SUMMARY_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        // The backend's rows are one per target, so the post arrives twice.
+        // The two rows are one post going to two places, and the title says
+        // so — twice over, it would read as two unrelated posts.
+        expect(wrapper.findAll('[data-test="top-posts-table"] tbody tr')).toHaveLength(2)
+        expect(wrapper.findAll('[data-test="top-post-title-88"]')).toHaveLength(1)
+    })
+
+    it('lets the post’s title span the places it reached', () => {
+        const wrapper = mountComponent(AnalyticsView, {
+            summary: TWO_ROUTE_SUMMARY_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        // The title is one cell across the post's rows, so the rows under it
+        // are the places the one post reached.
+        expect(wrapper.find('[data-test="top-post-title-88"]').attributes('rowspan')).toBe('2')
+    })
+
+    it('gives each place its own numbers', () => {
+        const wrapper = mountComponent(AnalyticsView, {
+            summary: TWO_ROUTE_SUMMARY_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        expect(wrapper.find('[data-test="top-post-reach-target:501"]').text()).toBe('100')
+        expect(wrapper.find('[data-test="top-post-reach-target:503"]').text()).toBe('40')
+    })
+
+    it('keeps the two accounts of one channel apart', () => {
+        const wrapper = mountComponent(AnalyticsView, {
+            summary: TWO_TARGETS_SUMMARY_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        // A member profile and an organisation page are two accounts of one
+        // channel: one post, two rows, two sets of numbers.
+        expect(wrapper.findAll('[data-test="top-posts-table"] tbody tr')).toHaveLength(2)
+        expect(wrapper.findAll('[data-test="top-post-title-88"]')).toHaveLength(1)
+        expect(wrapper.find('[data-test="top-post-reach-target:501"]').text()).toBe('100')
+        expect(wrapper.find('[data-test="top-post-reach-target:502"]').text()).toBe('30')
+    })
+
+    it('keeps the rows of one post apart when the list is re-ordered', async () => {
+        const wrapper = mountComponent(AnalyticsView, {
+            summary: TWO_TARGETS_SUMMARY_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        const row = wrapper.find('[data-test="top-post-target:501"]').element
+
+        // The rows swap places. Two rows keyed by the same thing are the same
+        // key twice, and the row that was first would be patched into the
+        // row that is now first — one place's row wearing the other's
+        // numbers.
+        await wrapper.setProps({
+            summary: {
+                ...TWO_TARGETS_SUMMARY_PAYLOAD,
+                top_posts: [...TWO_TARGETS_SUMMARY_PAYLOAD.top_posts].reverse(),
+            },
+        })
+
+        expect(wrapper.find('[data-test="top-post-target:501"]').element).toBe(row)
+        expect(wrapper.find('[data-test="top-post-reach-target:501"]').text()).toBe('100')
     })
 })

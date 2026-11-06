@@ -281,8 +281,29 @@ check "chart day total" src/components/AnalyticsView.vue \
 
 # 29. The top-posts table shows a dash for a reach that was never reported.
 check "top post null reach" src/components/AnalyticsView.vue \
-  '{{ formatCounter(post.reach) }}' \
-  '{{ post.reach.toLocaleString() }}' \
+  '{{ formatCounter(row.reach) }}' \
+  '{{ row.reach.toLocaleString() }}' \
+  tests/components/AnalyticsView.spec.ts
+
+# 72. The top-post rows are keyed by their target. Two rows with one key are
+# one row patched twice, and one row would wear the other's numbers.
+check "the top post row is keyed by its target" src/lib/metrics.ts \
+  '        ? `target:${post.target_id}`' \
+  '        ? `post:${post.post_id}:${post.via}:${post.platform}`' \
+  tests/lib/metrics.spec.ts
+
+# 73. A row without a target id is folded by the post, the route and the
+# network — the way a backend that sends no target id answered.
+check "a row without a target is folded by the post" src/lib/metrics.ts \
+  '        : `post:${post.post_id}:${post.via}:${post.platform}`' \
+  '        : `target:${post.post_id}`' \
+  tests/lib/metrics.spec.ts
+
+# 74. The post's title spans the rows of the places it reached, so the two
+# rows read as one post going to two places.
+check "the post's title spans its rows" src/components/AnalyticsView.vue \
+  ':rowspan="group.rows.length"' \
+  ':rowspan="1"' \
   tests/components/AnalyticsView.spec.ts
 
 # 40. The platform entry's flag is read, not the entry itself.

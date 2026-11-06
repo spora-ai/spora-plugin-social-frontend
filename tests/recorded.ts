@@ -402,6 +402,10 @@ export const CALENDAR_PAYLOAD = {
  * A row is a **channel**: the network and the route to it. The series is
  * keyed by the channel's key, so the same network on two routes is two
  * segments.
+ *
+ * The **top posts** are one row per **target**, and each row carries the
+ * target's id: a post on two accounts is two rows, and the id is what tells
+ * them apart.
  */
 export const SUMMARY_PAYLOAD = {
     totals: {
@@ -451,6 +455,7 @@ export const SUMMARY_PAYLOAD = {
         {
             post_id: 88,
             title: 'Q4 release',
+            target_id: 501,
             platform: 'linkedin',
             via: 'direct',
             reach: 4820,
@@ -461,6 +466,7 @@ export const SUMMARY_PAYLOAD = {
         {
             post_id: 89,
             title: 'Studio launch',
+            target_id: 502,
             platform: 'instagram',
             via: 'direct',
             reach: null,
@@ -479,6 +485,9 @@ export const SUMMARY_PAYLOAD = {
  * page published through the aggregator: one network, two accounts, two
  * sets of numbers. The rows are per channel, so the network appears twice —
  * and the series carries a segment for each.
+ *
+ * The **top posts** carry the two target ids, because the post reached two
+ * targets: one row for each, with that target's numbers.
  */
 export const TWO_ROUTE_SUMMARY_PAYLOAD = {
     totals: {
@@ -523,6 +532,7 @@ export const TWO_ROUTE_SUMMARY_PAYLOAD = {
         {
             post_id: 88,
             title: 'Q4 release',
+            target_id: 501,
             platform: 'linkedin',
             via: 'direct',
             reach: 100,
@@ -533,11 +543,73 @@ export const TWO_ROUTE_SUMMARY_PAYLOAD = {
         {
             post_id: 88,
             title: 'Q4 release',
+            target_id: 503,
             platform: 'linkedin',
             via: 'zernio',
             reach: 40,
             impressions: 80,
             likes: 5,
+            published_at: '2026-11-02T09:00:04+00:00',
+        },
+    ],
+    notes: [],
+} satisfies AnalyticsSummary
+
+/**
+ * The same endpoint for a post that reached **two accounts of one channel**.
+ *
+ * A LinkedIn member profile and a LinkedIn organisation page: the same post,
+ * the same channel, two targets and two sets of numbers. The backend sends
+ * one row per target, so the post arrives twice — and the two rows are one
+ * post going to two places, not two posts.
+ */
+export const TWO_TARGETS_SUMMARY_PAYLOAD = {
+    totals: {
+        reach: 130,
+        impressions: 260,
+        likes: 7,
+        comments: 0,
+        shares: 0,
+        saves: 0,
+        clicks: 0,
+    },
+    by_network: [
+        {
+            platform: 'linkedin',
+            channel: 'direct:linkedin',
+            via: 'direct',
+            reach: 130,
+            impressions: 260,
+            likes: 7,
+            comments: 0,
+            shares: 0,
+            saves: 0,
+            clicks: 0,
+            posts: 1,
+        },
+    ],
+    series: [{ date: '2026-10-01', 'direct:linkedin': 130 }],
+    top_posts: [
+        {
+            post_id: 88,
+            title: 'Q4 release',
+            target_id: 501,
+            platform: 'linkedin',
+            via: 'direct',
+            reach: 100,
+            impressions: 200,
+            likes: 5,
+            published_at: '2026-11-02T09:00:04+00:00',
+        },
+        {
+            post_id: 88,
+            title: 'Q4 release',
+            target_id: 502,
+            platform: 'linkedin',
+            via: 'direct',
+            reach: 30,
+            impressions: 60,
+            likes: 2,
             published_at: '2026-11-02T09:00:04+00:00',
         },
     ],
