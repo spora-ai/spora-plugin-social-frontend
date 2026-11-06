@@ -29,6 +29,11 @@ import type {
  *
  * `needs_setup` is the setup notice in the plugin's own wording: the plugin
  * emits it and the host translates it, so the frontend renders it as it comes.
+ *
+ * The **aggregators** are a section of their own: an aggregator is not an
+ * OAuth provider — it has no client id and no redirect URI, only a key. The
+ * flag is **the principal's**, so the request names one.
+ *
  * The **rules** are the backend's own limits — it is what refuses the
  * publish, so the frontend must not keep a copy of them. They are keyed by
  * the **channel's key**: the route, then the network. The same network on
@@ -51,6 +56,14 @@ export const CONFIG_PAYLOAD = {
             config_id: null,
             needs_setup: null,
             redirect_uri: 'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
+        },
+    },
+    aggregators: {
+        zernio: {
+            // The principal has no key yet.
+            configured: false,
+            label: 'Zernio',
+            needs_setup: null,
         },
     },
     app_url: 'https://spora.example.com',
@@ -209,6 +222,7 @@ export const UNCONFIGURED_CONFIG_PAYLOAD = {
             redirect_uri: 'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
         },
     },
+    aggregators: CONFIG_PAYLOAD.aggregators,
     app_url: 'https://spora.example.com',
     app_url_public: true,
     rules: CONFIG_PAYLOAD.rules,
@@ -221,6 +235,8 @@ export const UNCONFIGURED_CONFIG_PAYLOAD = {
  * A **bare array**, not an envelope. One login per provider: the Meta
  * connection covers an Instagram professional account *and* a Facebook Page.
  *
+ * The third connection is an **aggregator's**: the slug is its provider, and
+ * the accounts it covers carry the route they publish through.
  */
 export const CONNECTIONS_PAYLOAD = [
     {
@@ -299,6 +315,37 @@ export const CONNECTIONS_PAYLOAD = [
         ],
         created_at: '2026-06-09T08:12:00+00:00',
         updated_at: '2026-06-09T08:12:00+00:00',
+    },
+    {
+        id: 3,
+        principal_id: 7,
+        provider: 'zernio',
+        business_external_id: null,
+        config_id: null,
+        // A key does not expire.
+        expires_at: null,
+        status: 'active',
+        needs_reconnect: false,
+        scopes: [],
+        accounts: [
+            {
+                id: 15,
+                account_id: 15,
+                platform: 'bluesky',
+                via: 'zernio',
+                kind: 'aggregator',
+                external_id: '66b2a1c0',
+                display_name: 'Fabeat on Bluesky',
+                username: 'fabeat.bsky.social',
+                followers: null,
+                status: 'active',
+                connected_at: '2026-11-03T09:00:00+00:00',
+                can_report: false,
+                report_note: null,
+            },
+        ],
+        created_at: '2026-11-03T09:00:00+00:00',
+        updated_at: '2026-11-03T09:00:00+00:00',
     },
 ] satisfies SocialConnection[]
 

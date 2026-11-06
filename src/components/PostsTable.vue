@@ -164,7 +164,7 @@ function postWhen(post: SocialPost): string | null {
                                     class="text-[10px] text-muted-foreground"
                                     :data-test="`post-route-${channel.key}`"
                                 >
-                                    {{ routeLabel(channel.via) }}
+                                    {{ routeLabel(channel.via, props.config?.aggregators ?? {}) }}
                                 </span>
                             </span>
                         </div>

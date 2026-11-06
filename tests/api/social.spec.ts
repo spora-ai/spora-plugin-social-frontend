@@ -66,9 +66,32 @@ describe('api/social — the paths', () => {
         expect(post).toHaveBeenCalledWith('/plugins/social/connections/1/health', { principal_id: 3 })
     })
 
-    it('reads the plugin configuration', async () => {
-        await social.getConfig()
-        expect(get).toHaveBeenCalledWith('/plugins/social/config')
+    it('reads the plugin configuration, naming the principal', async () => {
+        // The aggregators' flags are the principal's, so a request without a
+        // principal answers that nobody's key is known.
+        await social.getConfig(3)
+        expect(get).toHaveBeenCalledWith('/plugins/social/config', { principal_id: 3 })
+    })
+
+    it('stores the aggregator’s key', async () => {
+        await social.setAggregatorKey(3, 'zernio', 'the-key')
+        expect(post).toHaveBeenCalledWith('/plugins/social/aggregators', {
+            principal_id: 3,
+            aggregator: 'zernio',
+            api_key: 'the-key',
+        })
+    })
+
+    it('forgets the aggregator’s key', async () => {
+        await social.forgetAggregator(3, 'zernio')
+        expect(del).toHaveBeenCalledWith('/plugins/social/aggregators/zernio?principal_id=3')
+    })
+
+    it('reads the aggregator’s accounts again', async () => {
+        await social.syncAggregator(3, 'zernio')
+        expect(post).toHaveBeenCalledWith('/plugins/social/aggregators/zernio/sync', {
+            principal_id: 3,
+        })
     })
 
     it('reads the posts of a principal, with the filters', async () => {
@@ -130,7 +153,7 @@ describe('api/social — the paths', () => {
         await social.listPosts(3)
         await social.getCalendar(3, '2026-11')
         await social.listMedia(3)
-        await social.getConfig()
+        await social.getConfig(3)
 
         const paths = get.mock.calls.map((call) => String(call[0]))
         expect(paths.some((path) => path.includes('/accounts'))).toBe(false)
@@ -175,7 +198,7 @@ describe('api/social — the shapes', () => {
         get.mockResolvedValueOnce(CONNECTIONS_PAYLOAD)
         const connections = await social.listConnections(3)
 
-        expect(connections).toHaveLength(2)
+        expect(connections).toHaveLength(3)
         expect(connections[0]?.accounts).toHaveLength(2)
     })
 
@@ -194,9 +217,26 @@ describe('api/social — the shapes', () => {
         await expect(social.listConnections(3)).rejects.toThrow(TypeError)
     })
 
+    it('reads the aggregator’s flag from the config', async () => {
+        // The flag is the principal's, and the backend sends it with the
+        // principal's own name.
+        get.mockResolvedValueOnce(CONFIG_PAYLOAD)
+        const config = await social.getConfig(3)
+
+        expect(config.aggregators.zernio?.configured).toBe(false)
+        expect(config.aggregators.zernio?.label).toBe('Zernio')
+    })
+
+    it('treats an aggregator entry that is absent as not set up', async () => {
+        get.mockResolvedValueOnce({ providers: {} })
+        const config = await social.getConfig(3)
+
+        expect(config.aggregators).toEqual({})
+    })
+
     it('reads the provider entries of the config', async () => {
         get.mockResolvedValueOnce(CONFIG_PAYLOAD)
-        const config = await social.getConfig()
+        const config = await social.getConfig(3)
 
         expect(config.providers.meta.configured).toBe(true)
         // A configured provider has no notice: the backend sends one exactly
@@ -211,7 +251,7 @@ describe('api/social — the shapes', () => {
 
     it('treats a provider entry that is absent as not configured', async () => {
         get.mockResolvedValueOnce({ app_url: null, app_url_public: false })
-        const config = await social.getConfig()
+        const config = await social.getConfig(3)
 
         expect(config.providers.meta).toEqual({
             configured: false,
@@ -230,7 +270,7 @@ describe('api/social — the shapes', () => {
         get.mockResolvedValueOnce({
             providers: { meta: { client_id: 'spora-meta-app-id' } },
         })
-        const config = await social.getConfig()
+        const config = await social.getConfig(3)
 
         expect(config.providers.meta.configured).toBe(false)
         expect(config.providers.meta.client_id).toBe('spora-meta-app-id')
@@ -246,7 +286,7 @@ describe('api/social — the shapes', () => {
                 },
             },
         })
-        const config = await social.getConfig()
+        const config = await social.getConfig(3)
 
         expect(config.providers.meta.needs_setup).toBeNull()
     })
@@ -260,14 +300,14 @@ describe('api/social — the shapes', () => {
                 },
             },
         })
-        const config = await social.getConfig()
+        const config = await social.getConfig(3)
 
         expect(config.providers.meta.needs_setup).toBeNull()
     })
 
     it('reads the setup notice of an unconfigured provider', async () => {
         get.mockResolvedValueOnce(UNCONFIGURED_CONFIG_PAYLOAD)
-        const config = await social.getConfig()
+        const config = await social.getConfig(3)
 
         expect(config.providers.meta.configured).toBe(false)
         expect(config.providers.meta.needs_setup?.title).toBe('Meta integration needs setup')
@@ -278,7 +318,7 @@ describe('api/social — the shapes', () => {
 
     it('reads the rules the backend enforces', async () => {
         get.mockResolvedValueOnce(CONFIG_PAYLOAD)
-        const config = await social.getConfig()
+        const config = await social.getConfig(3)
 
         expect(config.rules['direct:instagram']!.max_text).toBe(2200)
         expect(config.rules['direct:instagram']!.media_required).toBe(true)

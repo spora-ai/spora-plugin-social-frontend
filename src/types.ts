@@ -92,8 +92,13 @@ export type ConnectionStatus = 'active' | 'expired' | 'revoked' | 'error'
 export interface SocialConnection {
     id: number
     principal_id: number
-    /** The provider the connection belongs to. */
-    provider: Provider
+    /**
+     * The provider the connection belongs to.
+     *
+     * An OAuth provider for a login, an aggregator's slug for a key — and an
+     * aggregator's slug is also the route its accounts publish through.
+     */
+    provider: Provider | string
     /** The portfolio the connection belongs to — Meta's client business id. */
     business_external_id: string | null
     /** Meta's configuration id; null where the platform has none. */
@@ -457,6 +462,43 @@ export interface PlatformRules {
 }
 
 /**
+ * What one aggregator is set up for.
+ *
+ * The flag is **the principal's**: the key is the operator's, and it lives
+ * on the connection row.
+ */
+export interface AggregatorConfig {
+    configured: boolean
+    /** The name the operator knows the aggregator by. */
+    label: string
+    needs_setup: string | null
+}
+
+/** What the aggregator's own routes answer with. */
+export interface AggregatorResult {
+    aggregator: string
+    label: string
+    configured: boolean
+    /** The connection the key landed on. */
+    connection_id?: number
+    /** Whether the key is gone. */
+    deleted?: boolean
+    /** What the operation did, in the aggregator's own terms. */
+    message?: string
+}
+
+/** What a sync read back. */
+export interface AggregatorSyncResult {
+    aggregator: string
+    /** The accounts the aggregator reports. */
+    accounts: number
+    /** The accounts it no longer reports. */
+    disconnected: number
+    /** Whether the aggregator's analytics add-on is there. */
+    analytics: boolean
+}
+
+/**
  * The networks the plugin reaches on its own route.
  *
  * The plugin's own OAuth covers these three; everything else it reaches
@@ -476,6 +518,13 @@ export interface PostQuery {
 
 export interface SocialConfig {
     providers: Record<Provider, ProviderConfig>
+    /**
+     * The aggregators the plugin can publish through.
+     *
+     * Keyed by the aggregator's slug, which is also the route its accounts
+     * publish through.
+     */
+    aggregators: Record<string, AggregatorConfig>
     app_url: string | null
     app_url_public: boolean
     /** The rules, keyed by the channel's key. */

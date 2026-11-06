@@ -68,7 +68,7 @@ const groups = computed(() => {
  * the operator knows it by, which the backend sends.
  */
 function labelOfRoute(via: Route): string {
-    return routeLabel(via)
+    return routeLabel(via, props.config?.aggregators ?? {})
 }
 
 /** The name of the network an account is on. */

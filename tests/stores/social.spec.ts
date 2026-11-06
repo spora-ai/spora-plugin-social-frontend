@@ -34,7 +34,7 @@ describe('stores/social', () => {
         await store.loadConnections(7)
 
         expect(get).toHaveBeenCalledWith('/plugins/social/connections', { principal_id: 7 })
-        expect(store.connections).toHaveLength(2)
+        expect(store.connections).toHaveLength(3)
     })
 
     it('flattens the accounts of every connection', async () => {
@@ -45,7 +45,7 @@ describe('stores/social', () => {
 
         await store.loadConnections(7)
 
-        expect(store.accounts).toHaveLength(3)
+        expect(store.accounts).toHaveLength(4)
     })
 
     it('puts a new post at the top of the list', async () => {
@@ -101,7 +101,7 @@ describe('stores/social', () => {
         get.mockResolvedValue(CONFIG_PAYLOAD)
         const store = useSocialStore()
 
-        await store.loadConfig()
+        await store.loadConfig(7)
 
         expect(store.config?.providers.linkedin.redirect_uri).toBe(
             'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
@@ -122,7 +122,7 @@ describe('stores/social', () => {
         })
         const store = useSocialStore()
 
-        await store.loadConfig()
+        await store.loadConfig(7)
 
         expect(store.config?.providers.linkedin.redirect_uri).toBeNull()
     })
@@ -131,7 +131,7 @@ describe('stores/social', () => {
         get.mockResolvedValue(CONFIG_PAYLOAD)
         const store = useSocialStore()
 
-        await store.loadConfig()
+        await store.loadConfig(7)
 
         expect(store.rules['direct:linkedin']?.max_text).toBe(3000)
         expect(store.rules['direct:instagram']?.max_text).toBe(2200)
@@ -142,18 +142,18 @@ describe('stores/social', () => {
         get.mockResolvedValue(CONFIG_PAYLOAD)
         const store = useSocialStore()
 
-        await store.loadConfig()
-        await store.loadConfig()
+        await store.loadConfig(7)
+        await store.loadConfig(7)
 
         expect(get).toHaveBeenCalledTimes(1)
-        expect(get).toHaveBeenCalledWith('/plugins/social/config')
+        expect(get).toHaveBeenCalledWith('/plugins/social/config', { principal_id: 7 })
     })
 
     it('has no rules when the config could not be read', async () => {
         get.mockRejectedValue(new Error('boom'))
         const store = useSocialStore()
 
-        await store.loadConfig()
+        await store.loadConfig(7)
 
         expect(store.configError).not.toBeNull()
         expect(store.rules).toEqual({})
@@ -243,7 +243,7 @@ describe('stores/social — the reads', () => {
         get.mockRejectedValueOnce(hostApiError('No client id.', 'config', 422))
         const store = useSocialStore()
 
-        await store.loadConfig()
+        await store.loadConfig(7)
 
         expect(store.configError).toBe('No client id.')
     })
@@ -254,12 +254,49 @@ describe('stores/social — the reads', () => {
         get.mockRejectedValueOnce(new Error('boom'))
         const store = useSocialStore()
 
-        await store.loadConfig()
+        await store.loadConfig(7)
         get.mockResolvedValueOnce(CONFIG_PAYLOAD)
-        await store.loadConfig()
+        await store.loadConfig(7)
 
         expect(store.configError).toBeNull()
         expect(store.rules['direct:linkedin']?.max_text).toBe(3000)
+    })
+})
+
+describe('stores/social — the aggregator', () => {
+    it('reads the config again for another principal', async () => {
+        // The aggregators' flags are the principal's, so another principal
+        // is another config.
+        get.mockResolvedValue(CONFIG_PAYLOAD)
+        const store = useSocialStore()
+
+        await store.loadConfig(7)
+        await store.loadConfig(9)
+
+        expect(get).toHaveBeenCalledTimes(2)
+    })
+
+    it('reads the config again after a key is stored', async () => {
+        // The flag is what says whether the aggregator is set up, and the
+        // key has just changed it.
+        get.mockResolvedValue(CONFIG_PAYLOAD)
+        const store = useSocialStore()
+
+        await store.loadConfig(7)
+        await store.setAggregatorKey(7, 'zernio', 'the-key')
+
+        expect(get.mock.calls.filter((call) => String(call[0]).includes('/config'))).toHaveLength(2)
+    })
+
+    it('reads the connections again after a key is stored', async () => {
+        // The aggregator's accounts are discovered rather than connected, so
+        // they are only known once the key is there.
+        get.mockResolvedValue(CONFIG_PAYLOAD)
+        const store = useSocialStore()
+
+        await store.setAggregatorKey(7, 'zernio', 'the-key')
+
+        expect(get).toHaveBeenCalledWith('/plugins/social/connections', { principal_id: 7 })
     })
 })
 
@@ -271,7 +308,7 @@ describe('stores/social — the connections', () => {
 
         await store.disconnectConnection(7, 1)
 
-        expect(store.connections.map((connection) => connection.id)).toEqual([2])
+        expect(store.connections.map((connection) => connection.id)).toEqual([2, 3])
     })
 
     it('reports a failed disconnect', async () => {

@@ -14,7 +14,7 @@
  * the channel's identity.
  */
 import { t } from '../i18n'
-import type { Channel, Network, PlatformRules, Route } from '../types'
+import type { AggregatorConfig, Channel, Network, PlatformRules, Route } from '../types'
 
 /** The rules, keyed by the channel's key. */
 export type ChannelRules = Record<string, PlatformRules>
@@ -25,12 +25,13 @@ export const DIRECT_ROUTE = 'direct'
 /**
  * The name of a route.
  *
- * The plugin's own route has a name of its own; an aggregator's slug is the
- * route's own name until the config names it.
+ * The plugin's own route has a name of its own; an aggregator's is the name
+ * the operator knows it by, which the backend sends with the config — so
+ * the route reads as a product and not as a category.
  */
-export function routeLabel(via: Route): string {
+export function routeLabel(via: Route, aggregators: Record<string, AggregatorConfig>): string {
     if (via === DIRECT_ROUTE) return t('Direct')
-    return via
+    return aggregators[via]?.label ?? via
 }
 
 /**

@@ -187,7 +187,7 @@ function ruleFor(channel: Channel): PlatformRules | undefined {
 function channelTitle(channel: Channel): string {
     const label = channelLabel(channel, social.rules)
     if (channel.via === DIRECT_ROUTE) return label
-    return `${label} · ${routeLabel(channel.via)}`
+    return `${label} · ${routeLabel(channel.via, social.config?.aggregators ?? {})}`
 }
 
 /** The title of the channel whose own text the Message box edits. */
@@ -961,7 +961,7 @@ async function submit(): Promise<void> {
                                         class="truncate text-[11px] text-muted-foreground"
                                         :data-test="`preview-route-${preview.channel.key}`"
                                     >
-                                        {{ routeLabel(preview.channel.via) }}
+                                        {{ routeLabel(preview.channel.via, social.config?.aggregators ?? {}) }}
                                     </span>
                                 </div>
                                 <div class="flex items-center gap-2">

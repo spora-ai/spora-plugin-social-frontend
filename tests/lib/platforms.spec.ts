@@ -153,8 +153,9 @@ describe('lib/platforms — the channel', () => {
         expect(networkLabel('bluesky', rules)).toBe('Bluesky')
     })
 
-    it('names the plugin’s own route', () => {
-        expect(routeLabel('direct')).toBe('Direct')
+    it('names the plugin’s own route, and an aggregator by its own name', () => {
+        expect(routeLabel('direct', {})).toBe('Direct')
+        expect(routeLabel('zernio', CONFIG_PAYLOAD.aggregators)).toBe('Zernio')
     })
 
     it('names the networks a post reaches through two routes', () => {

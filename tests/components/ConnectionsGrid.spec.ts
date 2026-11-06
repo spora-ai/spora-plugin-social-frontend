@@ -15,7 +15,8 @@ describe('ConnectionsGrid', () => {
 
         expect(wrapper.find('[data-test="connection-1"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="connection-2"]').exists()).toBe(true)
-        expect(wrapper.findAll('[data-test^="connection-"]').filter((card) => card.attributes('data-test')?.match(/^connection-\d+$/))).toHaveLength(2)
+        expect(wrapper.find('[data-test="connection-3"]').exists()).toBe(true)
+        expect(wrapper.findAll('[data-test^="connection-"]').filter((card) => card.attributes('data-test')?.match(/^connection-\d+$/))).toHaveLength(3)
     })
 
     it('shows both accounts a Meta connection covers, with their platform badges', () => {
@@ -256,5 +257,139 @@ describe('ConnectionsGrid', () => {
 
         expect(wrapper.find('[data-test="connection-refresh-2"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="connection-disconnect-2"]').exists()).toBe(true)
+    })
+})
+
+describe('ConnectionsGrid — the aggregator', () => {
+    it('offers the aggregator as one quiet line below the native providers', () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: CONNECTIONS_PAYLOAD.filter((connection) => connection.provider !== 'zernio'),
+            config: CONFIG_PAYLOAD,
+        })
+
+        // One line, not a card of its own: the aggregator is an extra, not
+        // a peer of the providers the operator connects themselves.
+        expect(wrapper.find('[data-test="add-aggregator"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="add-aggregator-zernio"]').text()).toContain('Add Zernio')
+        expect(wrapper.find('[data-test="provider-zernio"]').exists()).toBe(false)
+    })
+
+    it('puts the aggregator’s line after the native providers', () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: [],
+            config: CONFIG_PAYLOAD,
+        })
+
+        const order = wrapper
+            .findAll('[data-test]')
+            .map((node) => node.attributes('data-test'))
+
+        const lastProvider = order.lastIndexOf('provider-linkedin')
+        const aggregator = order.indexOf('add-aggregator')
+
+        expect(lastProvider).toBeGreaterThan(-1)
+        expect(aggregator).toBeGreaterThan(lastProvider)
+    })
+
+    it('opens a panel that says what the thing is and takes the key', async () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: [],
+            config: CONFIG_PAYLOAD,
+        })
+
+        expect(wrapper.find('[data-test="aggregator-panel"]').exists()).toBe(false)
+
+        await wrapper.find('[data-test="add-aggregator-zernio"]').trigger('click')
+
+        const panel = wrapper.find('[data-test="aggregator-panel"]')
+        expect(panel.exists()).toBe(true)
+        // It says where the key comes from, and takes one.
+        expect(panel.text()).toContain('Settings → API keys')
+        expect(panel.find('[data-test="aggregator-api-key"]').exists()).toBe(true)
+    })
+
+    it('hands the key over when it is saved', async () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: [],
+            config: CONFIG_PAYLOAD,
+        })
+
+        await wrapper.find('[data-test="add-aggregator-zernio"]').trigger('click')
+        await wrapper.find('[data-test="aggregator-api-key"]').setValue('the-key')
+        await wrapper.find('[data-test="aggregator-save"]').trigger('click')
+
+        expect(wrapper.emitted('addAggregator')).toEqual([['zernio', 'the-key']])
+    })
+
+    it('marks the aggregator’s connection as an aggregator', () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: CONNECTIONS_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        // The chip is what keeps it from being mistaken for a login.
+        const card = wrapper.find('[data-test="connection-3"]')
+        expect(card.find('[data-test="aggregator-chip"]').exists()).toBe(true)
+        expect(card.find('[data-test="aggregator-chip"]').text()).toBe('Aggregator')
+        // And the card says where the accounts are managed.
+        expect(card.find('[data-test="aggregator-note-3"]').text()).toContain('managed in Zernio')
+    })
+
+    it('offers the aggregator a sync and a forgotten key, not a login’s buttons', () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: CONNECTIONS_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        const card = wrapper.find('[data-test="connection-3"]')
+        expect(card.find('[data-test="aggregator-sync-3"]').exists()).toBe(true)
+        expect(card.find('[data-test="aggregator-forget-3"]').exists()).toBe(true)
+        // There is no token to renew and no login to close.
+        expect(card.find('[data-test="connection-refresh-3"]').exists()).toBe(false)
+        expect(card.find('[data-test="connection-disconnect-3"]').exists()).toBe(false)
+    })
+
+    it('shows the aggregator’s accounts with the network’s own rules', () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: CONNECTIONS_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        const account = wrapper.find('[data-test="connection-account-15"]')
+        expect(account.find('[data-network="bluesky"]').text()).toBe('Bluesky')
+        expect(account.find('[data-test="account-rule-15"]').text()).toContain(
+            'Bluesky accepts JPEG, PNG, WebP or GIF',
+        )
+    })
+
+    it('says so when an account the aggregator no longer reports is disconnected', () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: [
+                makeConnection({
+                    id: 9,
+                    provider: 'zernio',
+                    accounts: [makeAccount({ id: 30, platform: 'bluesky', via: 'zernio', status: 'disconnected' })],
+                }),
+            ],
+            config: CONFIG_PAYLOAD,
+        })
+
+        expect(wrapper.find('[data-test="account-disconnected-30"]').text()).toBe('Disconnected')
+    })
+
+    it('shows no add-line once the aggregator is set up', () => {
+        // An operator who only wants LinkedIn and Facebook never sees the
+        // aggregator again.
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: CONNECTIONS_PAYLOAD,
+            config: {
+                ...CONFIG_PAYLOAD,
+                aggregators: {
+                    zernio: { configured: true, label: 'Zernio', needs_setup: null },
+                },
+            },
+        })
+
+        expect(wrapper.find('[data-test="add-aggregator"]').exists()).toBe(false)
     })
 })
