@@ -46,7 +46,7 @@ describe('lib/platforms', () => {
         expect(Object.keys(platforms)).not.toContain('PLATFORM_CONSTRAINTS')
     })
 
-    it('carries no copy of the networks’ names', () => {
+    it('keeps no label map of its own', () => {
         // The label is the backend's: a copy here is a name nobody updates.
         const source = readFileSync(join(process.cwd(), 'src/lib/platforms.ts'), 'utf8')
 

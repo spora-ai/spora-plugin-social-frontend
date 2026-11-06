@@ -5,7 +5,9 @@
  * because the backend is what refuses the publish — a copy here warns about
  * a number the backend no longer enforces, and a copy of a name is where a
  * name goes stale. So the composer reads the rules it is given and has none
- * of its own.
+ * of its own. The three networks the plugin reaches on its own route are
+ * the one exception — their names are brands, and they stand in until the
+ * config has arrived.
  *
  * **A network and a route are two axes.** A network is where a post goes
  * (LinkedIn, Bluesky, TikTok); a route is how it gets there (the plugin's
