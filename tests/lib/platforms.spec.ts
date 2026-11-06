@@ -2,7 +2,20 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as platforms from '../../src/lib/platforms'
-import { brandColorVar, chartColorVar, charCount, composeText, mediaFit, parseHashtags } from '../../src/lib/platforms'
+import {
+    brandColorVar,
+    channelFromKey,
+    channelKey,
+    channelLabel,
+    chartColorVar,
+    charCount,
+    composeText,
+    mediaFit,
+    networkLabel,
+    networksOnTwoRoutes,
+    parseHashtags,
+    routeLabel,
+} from '../../src/lib/platforms'
 import { CONFIG_PAYLOAD } from '../recorded'
 
 const rules = CONFIG_PAYLOAD.rules
@@ -20,14 +33,23 @@ describe('lib/platforms', () => {
         expect(Object.keys(platforms)).not.toContain('PLATFORM_CONSTRAINTS')
     })
 
+    it('carries no copy of the networks’ names', () => {
+        // The label is the backend's: a copy here is a name nobody updates.
+        const source = readFileSync(join(process.cwd(), 'src/lib/platforms.ts'), 'utf8')
+
+        expect(source).not.toContain('PLATFORM_LABELS')
+        expect(source).not.toContain('PLATFORMS')
+        expect(Object.keys(platforms)).not.toContain('PLATFORM_LABELS')
+    })
+
     it('reads the character limit from the backend’s rule', () => {
-        expect(rules.linkedin?.max_text).toBe(3000)
-        expect(rules.facebook?.max_text).toBe(63206)
-        expect(rules.instagram?.max_text).toBe(2200)
+        expect(rules['direct:linkedin']?.max_text).toBe(3000)
+        expect(rules['direct:facebook']?.max_text).toBe(63206)
+        expect(rules['direct:instagram']?.max_text).toBe(2200)
     })
 
     it('flags a body past the limit, and a body close to it', () => {
-        const limit = rules.linkedin!.max_text
+        const limit = rules['direct:linkedin']!.max_text
 
         expect(charCount('a'.repeat(limit), limit).over).toBe(false)
         expect(charCount('a'.repeat(limit + 1), limit).over).toBe(true)
@@ -40,7 +62,7 @@ describe('lib/platforms', () => {
         // platforms count code points, so a caption of 2,200 emoji is at the
         // limit — not twice over it.
         const emoji = '😀'
-        const limit = rules.instagram!.max_text
+        const limit = rules['direct:instagram']!.max_text
 
         expect(charCount(emoji.repeat(limit), limit).n).toBe(limit)
         expect(charCount(emoji.repeat(limit), limit).over).toBe(false)
@@ -50,58 +72,163 @@ describe('lib/platforms', () => {
     it('quotes the backend’s wording on the media fit', () => {
         const fit = mediaFit(
             { mime_type: 'image/png', size_bytes: 1000 },
-            rules.instagram!,
+            rules['direct:instagram']!,
         )
 
         expect(fit.fits).toBe(false)
-        expect(fit.reason).toBe(rules.instagram!.media_note)
-        expect(fit.remedy).toBe(rules.instagram!.media_remedy)
+        expect(fit.reason).toBe(rules['direct:instagram']!.media_note)
+        expect(fit.remedy).toBe(rules['direct:instagram']!.media_remedy)
     })
 
     it('names the action for a video the platform rejects', () => {
         const fit = mediaFit(
             { mime_type: 'video/quicktime', size_bytes: 1000 },
-            rules.instagram!,
+            rules['direct:instagram']!,
         )
 
-        expect(fit.remedy).toBe(rules.instagram!.video_remedy)
+        expect(fit.remedy).toBe(rules['direct:instagram']!.video_remedy)
     })
 
     it('accepts a PNG on the networks that take one', () => {
-        expect(mediaFit({ mime_type: 'image/png', size_bytes: 1000 }, rules.linkedin!).fits).toBe(true)
-        expect(mediaFit({ mime_type: 'image/png', size_bytes: 1000 }, rules.facebook!).fits).toBe(true)
+        expect(mediaFit({ mime_type: 'image/png', size_bytes: 1000 }, rules['direct:linkedin']!).fits).toBe(true)
+        expect(mediaFit({ mime_type: 'image/png', size_bytes: 1000 }, rules['direct:facebook']!).fits).toBe(true)
     })
 
     it('names the remedy for a file over the network’s cap', () => {
         const fit = mediaFit(
-            { mime_type: 'image/jpeg', size_bytes: rules.linkedin!.max_bytes + 1 },
-            rules.linkedin!,
+            { mime_type: 'image/jpeg', size_bytes: rules['direct:linkedin']!.max_bytes + 1 },
+            rules['direct:linkedin']!,
         )
 
         expect(fit.fits).toBe(false)
-        expect(fit.remedy).toBe(rules.linkedin!.size_remedy)
-    })
-
-    it('keeps the chart series away from the brand hues', () => {
-        // LinkedIn's and Facebook's blues are indistinguishable in a stacked
-        // bar, so the series carry their own tokens.
-        expect(chartColorVar('linkedin')).toBe('var(--chart-linkedin)')
-        expect(chartColorVar('facebook')).toBe('var(--chart-facebook)')
-        expect(chartColorVar('instagram')).toBe('var(--chart-instagram)')
-        expect(brandColorVar('linkedin')).toBe('var(--platform-linkedin)')
-        expect(chartColorVar('linkedin')).not.toBe(brandColorVar('linkedin'))
+        expect(fit.remedy).toBe(rules['direct:linkedin']!.size_remedy)
     })
 
     it('counts an absent body as no characters', () => {
-        expect(charCount('', rules.linkedin!.max_text).n).toBe(0)
+        expect(charCount('', rules['direct:linkedin']!.max_text).n).toBe(0)
     })
 
     it('accepts an asset with no mime type of its own', () => {
         // Nothing to judge it against is not a refusal: the backend refuses
         // the file, not the composer.
-        const fit = mediaFit({ mime_type: null, size_bytes: 1000 }, rules.instagram!)
+        const fit = mediaFit({ mime_type: null, size_bytes: 1000 }, rules['direct:instagram']!)
 
         expect(fit.fits).toBe(true)
+    })
+})
+
+describe('lib/platforms — the channel', () => {
+    it('names a channel by the route and the network', () => {
+        expect(channelKey('direct', 'linkedin')).toBe('direct:linkedin')
+        expect(channelKey('zernio', 'bluesky')).toBe('zernio:bluesky')
+    })
+
+    it('reads a channel back out of its key', () => {
+        expect(channelFromKey('zernio:bluesky')).toEqual({
+            key: 'zernio:bluesky',
+            network: 'bluesky',
+            via: 'zernio',
+        })
+    })
+
+    it('reads a bare network name as the plugin’s own route to it', () => {
+        // The backend reads one that way too, so a key off the wire and a
+        // key built here are the same key.
+        expect(channelFromKey('linkedin').key).toBe('direct:linkedin')
+    })
+
+    it('takes the label of a channel from the rules', () => {
+        expect(channelLabel(channelFromKey('direct:linkedin'), rules)).toBe('LinkedIn')
+        expect(channelLabel(channelFromKey('zernio:bluesky'), rules)).toBe('Bluesky')
+    })
+
+    it('has no label for a channel the plugin does not offer', () => {
+        // A network with no rules row is one the plugin cannot publish to:
+        // no limits, no name, no colour.
+        expect(channelLabel(channelFromKey('zernio:myspace'), rules)).toBe('myspace')
+    })
+
+    it('names a network from any of its channels', () => {
+        expect(networkLabel('linkedin', rules)).toBe('LinkedIn')
+        expect(networkLabel('bluesky', rules)).toBe('Bluesky')
+    })
+
+    it('names the plugin’s own route', () => {
+        expect(routeLabel('direct')).toBe('Direct')
+    })
+
+    it('names the networks a post reaches through two routes', () => {
+        const channels = [
+            channelFromKey('direct:linkedin'),
+            channelFromKey('zernio:linkedin'),
+            channelFromKey('direct:bluesky'),
+        ]
+
+        expect(networksOnTwoRoutes(channels)).toEqual(['linkedin'])
+    })
+
+    it('names no network when each one is reached through one route', () => {
+        const channels = [channelFromKey('direct:linkedin'), channelFromKey('zernio:bluesky')]
+
+        expect(networksOnTwoRoutes(channels)).toEqual([])
+    })
+})
+
+describe('lib/platforms — the colours', () => {
+    it('keeps the chart series away from the brand hues', () => {
+        // LinkedIn's and Facebook's blues are indistinguishable in a stacked
+        // bar, so the series carry their own tokens.
+        expect(chartColorVar('linkedin')).toContain('--chart-linkedin')
+        expect(chartColorVar('facebook')).toContain('--chart-facebook')
+        expect(chartColorVar('instagram')).toContain('--chart-instagram')
+        expect(brandColorVar('linkedin')).toContain('--platform-linkedin')
+        expect(chartColorVar('linkedin')).not.toBe(brandColorVar('linkedin'))
+    })
+
+    it('gives a network with no variable the hashed colour instead', () => {
+        // Bluesky has no hand-picked hue, so it gets one hashed from its
+        // name — and the colour is not the brand hue of anything.
+        expect(chartColorVar('bluesky')).not.toContain('--chart-')
+        expect(brandColorVar('bluesky')).not.toContain('--platform-')
+    })
+
+    it('gives the same network the same colour on every screen', () => {
+        // The hue is hashed from the name, so a network looks the same in
+        // the chip, in the chart and in the legend.
+        expect(brandColorVar('bluesky')).toBe(brandColorVar('bluesky'))
+        expect(chartColorVar('tiktok')).toBe(chartColorVar('tiktok'))
+    })
+
+    it('hashes the hue from the network’s name', () => {
+        // Pinned, so a change to the hash is a deliberate one: a colour
+        // that moved under the operator's feet is a colour nobody can learn.
+        expect(brandColorVar('bluesky')).toContain('hsl(198 64% 38%)')
+        expect(brandColorVar('tiktok')).toContain('hsl(83 76% 46%)')
+        // The chart and the chip share the hue; only the mix differs.
+        expect(chartColorVar('bluesky')).toContain('hsl(198 64% 38%)')
+    })
+
+    it('gives two different networks different colours', () => {
+        expect(brandColorVar('bluesky')).not.toBe(brandColorVar('tiktok'))
+    })
+
+    it('names the networks with a hand-picked hue, and the stylesheet agrees', () => {
+        // The stylesheet declares the hues; the list here names the networks
+        // they belong to. A name here with no variable there would render an
+        // invisible chip, and a variable there with no name here would be
+        // dead CSS.
+        const stylesheet = readFileSync(join(process.cwd(), 'src/style.css'), 'utf8')
+
+        for (const network of ['linkedin', 'facebook', 'instagram']) {
+            expect(stylesheet).toContain(`--platform-${network}:`)
+            expect(stylesheet).toContain(`--chart-${network}:`)
+        }
+
+        const declared = [...stylesheet.matchAll(/--(?:platform|chart)-([a-z]+):/g)].map(
+            (match) => match[1]!,
+        )
+
+        expect([...new Set(declared)].sort()).toEqual(['facebook', 'instagram', 'linkedin'])
     })
 })
 

@@ -280,10 +280,10 @@ describe('api/social — the shapes', () => {
         get.mockResolvedValueOnce(CONFIG_PAYLOAD)
         const config = await social.getConfig()
 
-        expect(config.rules.instagram.max_text).toBe(2200)
-        expect(config.rules.instagram.media_required).toBe(true)
-        expect(config.rules.instagram.fetches_media).toBe(true)
-        expect(config.rules.linkedin.max_text).toBe(3000)
+        expect(config.rules['direct:instagram']!.max_text).toBe(2200)
+        expect(config.rules['direct:instagram']!.media_required).toBe(true)
+        expect(config.rules['direct:instagram']!.fetches_media).toBe(true)
+        expect(config.rules['direct:linkedin']!.max_text).toBe(3000)
     })
 
     it('reads the media assets the backend sent — a bare list', async () => {

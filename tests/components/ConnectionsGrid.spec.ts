@@ -27,8 +27,8 @@ describe('ConnectionsGrid', () => {
         const card = wrapper.find('[data-test="connection-1"]')
         expect(card.find('[data-test="connection-account-12"]').exists()).toBe(true)
         expect(card.find('[data-test="connection-account-13"]').exists()).toBe(true)
-        expect(card.find('[data-test="connection-account-12"] [data-platform="instagram"]').exists()).toBe(true)
-        expect(card.find('[data-test="connection-account-13"] [data-platform="facebook"]').exists()).toBe(true)
+        expect(card.find('[data-test="connection-account-12"] [data-network="instagram"]').exists()).toBe(true)
+        expect(card.find('[data-test="connection-account-13"] [data-network="facebook"]').exists()).toBe(true)
     })
 
     it('offers one Connect button per provider that has no connection', () => {

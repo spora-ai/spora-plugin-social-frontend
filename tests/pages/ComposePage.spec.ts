@@ -105,7 +105,7 @@ describe('ComposePage', () => {
             ...CONFIG_PAYLOAD,
             rules: {
                 ...CONFIG_PAYLOAD.rules,
-                instagram: { ...CONFIG_PAYLOAD.rules.instagram!, max_text: 1234 },
+                'direct:instagram': { ...CONFIG_PAYLOAD.rules['direct:instagram']!, max_text: 1234 },
             },
         }
 
@@ -119,7 +119,7 @@ describe('ComposePage', () => {
         await wrapper.find('[data-test="target-13"]').setValue(true)
         await flushPromises()
 
-        expect(wrapper.find('[data-test="preview-instagram"] .char-count').text()).toBe('0 / 1234')
+        expect(wrapper.find('[data-test="preview-direct:instagram"] .char-count').text()).toBe('0 / 1234')
     })
 
     it('says the limits are unknown while the rules have not arrived', async () => {
@@ -138,7 +138,7 @@ describe('ComposePage', () => {
         await flushPromises()
 
         // No rule, no counter: the frontend does not guess a limit.
-        expect(wrapper.find('[data-test="preview-linkedin"] .char-count').exists()).toBe(false)
+        expect(wrapper.find('[data-test="preview-direct:linkedin"] .char-count').exists()).toBe(false)
         expect(wrapper.find('[data-test="count-unknown"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="rule-note"]').exists()).toBe(false)
     })
@@ -234,8 +234,8 @@ describe('ComposePage — the queue below the composer', () => {
         await flushPromises()
 
         const link = wrapper.find('[data-test="up-next-88"]')
-        expect(link.findAll('[data-platform="linkedin"]')).toHaveLength(1)
-        expect(link.findAll('[data-platform="instagram"]')).toHaveLength(1)
+        expect(link.findAll('[data-network="linkedin"]')).toHaveLength(1)
+        expect(link.findAll('[data-network="instagram"]')).toHaveLength(1)
     })
 
     it('says so when nothing is scheduled', async () => {

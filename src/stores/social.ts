@@ -19,7 +19,6 @@ import type {
     CalendarPayload,
     ConnectAccountResult,
     CreatePostPayload,
-    Platform,
     PlatformRules,
     PostList,
     PostQuery,
@@ -48,13 +47,13 @@ export const useSocialStore = defineStore('social', () => {
     const notice = ref<string | null>(null)
 
     /**
-     * The rules the backend enforces, per platform.
+     * The rules the backend enforces, per channel.
      *
      * Empty until the config has been read, and empty for good when the
      * config could not be read: the composer must not fall back to a limit
      * of its own.
      */
-    const rules = computed<Partial<Record<Platform, PlatformRules>>>(() => config.value?.rules ?? {})
+    const rules = computed<Record<string, PlatformRules>>(() => config.value?.rules ?? {})
 
     /**
      * Every account, from every connection.
@@ -117,7 +116,7 @@ export const useSocialStore = defineStore('social', () => {
     }
 
     /**
-     * The config: the platform entries and the rules every screen reads.
+     * The config: the provider entries and the rules every screen reads.
      *
      * Read once. The composer needs the rules and the accounts screen needs
      * the entries, and a second read would be a second answer to a question

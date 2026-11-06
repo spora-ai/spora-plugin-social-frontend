@@ -29,9 +29,10 @@ import type {
  *
  * `needs_setup` is the setup notice in the plugin's own wording: the plugin
  * emits it and the host translates it, so the frontend renders it as it comes.
- *
  * The **rules** are the backend's own limits — it is what refuses the
- * publish, so the frontend must not keep a copy of them.
+ * publish, so the frontend must not keep a copy of them. They are keyed by
+ * the **channel's key**: the route, then the network. The same network on
+ * two routes is two channels with two sets of limits.
  */
 export const CONFIG_PAYLOAD = {
     providers: {
@@ -55,7 +56,10 @@ export const CONFIG_PAYLOAD = {
     app_url: 'https://spora.example.com',
     app_url_public: true,
     rules: {
-        linkedin: {
+        'direct:linkedin': {
+            label: 'LinkedIn',
+            network: 'linkedin',
+            via: 'direct',
             media_required: false,
             media_count: 1,
             fetches_media: false,
@@ -67,8 +71,12 @@ export const CONFIG_PAYLOAD = {
             media_remedy: 'Convert to JPEG',
             video_remedy: 'Convert the file to MP4',
             size_remedy: 'Compress',
+            counting_note: null,
         },
-        facebook: {
+        'direct:facebook': {
+            label: 'Facebook',
+            network: 'facebook',
+            via: 'direct',
             media_required: false,
             media_count: 1,
             fetches_media: false,
@@ -80,8 +88,12 @@ export const CONFIG_PAYLOAD = {
             media_remedy: 'Convert to JPEG',
             video_remedy: 'Convert to JPEG',
             size_remedy: 'Compress',
+            counting_note: null,
         },
-        instagram: {
+        'direct:instagram': {
+            label: 'Instagram',
+            network: 'instagram',
+            via: 'direct',
             media_required: true,
             media_count: 1,
             fetches_media: true,
@@ -93,6 +105,77 @@ export const CONFIG_PAYLOAD = {
             media_remedy: 'Convert to JPEG',
             video_remedy: 'Convert the file to MP4',
             size_remedy: 'Compress',
+            counting_note: null,
+        },
+        'zernio:linkedin': {
+            label: 'LinkedIn',
+            network: 'linkedin',
+            via: 'zernio',
+            media_required: false,
+            media_count: 1,
+            fetches_media: true,
+            mime_types: [
+                'image/jpeg',
+                'image/png',
+                'image/gif',
+                'video/mp4',
+                'video/quicktime',
+                'video/x-msvideo',
+            ],
+            max_bytes: 5368709120,
+            max_text: 3000,
+            visible_chars: 200,
+            media_note:
+                'LinkedIn accepts JPEG, PNG or GIF up to 8 MB, or an MP4, MOV or AVI video up to 5 GB.',
+            media_remedy: 'Convert to JPEG',
+            video_remedy: 'Convert the file to MP4',
+            size_remedy: 'Compress',
+            counting_note: null,
+        },
+        'zernio:bluesky': {
+            label: 'Bluesky',
+            network: 'bluesky',
+            via: 'zernio',
+            media_required: false,
+            media_count: 1,
+            fetches_media: true,
+            mime_types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'],
+            max_bytes: 52428800,
+            max_text: 300,
+            visible_chars: 300,
+            media_note: 'Bluesky accepts JPEG, PNG, WebP or GIF up to 1 MB, or an MP4 video up to 50 MB.',
+            media_remedy: 'Convert to JPEG',
+            video_remedy: 'Convert the file to MP4',
+            size_remedy: 'Compress',
+            counting_note: null,
+        },
+        'zernio:twitter': {
+            label: 'X',
+            network: 'twitter',
+            via: 'zernio',
+            media_required: false,
+            media_count: 1,
+            fetches_media: true,
+            mime_types: [
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+                'image/gif',
+                'video/mp4',
+                'video/quicktime',
+            ],
+            max_bytes: 536870912,
+            max_text: 280,
+            visible_chars: 280,
+            media_note:
+                'X accepts JPEG, PNG, WebP or GIF up to 5 MB, or an MP4 or MOV video up to 512 MB.',
+            media_remedy: 'Convert to JPEG',
+            video_remedy: 'Convert the file to MP4',
+            size_remedy: 'Compress',
+            // X counts a URL as 23 characters and an emoji as 2, so the
+            // plugin's own count is wrong for it.
+            counting_note:
+                'X counts a URL as 23 characters whatever its length, and an emoji as 2, so the number of characters in the body is not the number X counts.',
         },
     },
 } satisfies SocialConfig
@@ -137,6 +220,7 @@ export const UNCONFIGURED_CONFIG_PAYLOAD = {
  *
  * A **bare array**, not an envelope. One login per provider: the Meta
  * connection covers an Instagram professional account *and* a Facebook Page.
+ *
  */
 export const CONNECTIONS_PAYLOAD = [
     {
@@ -155,6 +239,7 @@ export const CONNECTIONS_PAYLOAD = [
                 id: 12,
                 account_id: 12,
                 platform: 'instagram',
+                via: 'direct',
                 kind: 'business',
                 external_id: '178400991',
                 display_name: 'Fabeat Studio',
@@ -169,6 +254,7 @@ export const CONNECTIONS_PAYLOAD = [
                 id: 13,
                 account_id: 13,
                 platform: 'facebook',
+                via: 'direct',
                 kind: 'page',
                 external_id: '118220094771',
                 display_name: 'Fabeat GmbH',
@@ -198,6 +284,7 @@ export const CONNECTIONS_PAYLOAD = [
                 id: 14,
                 account_id: 14,
                 platform: 'linkedin',
+                via: 'direct',
                 kind: 'member',
                 external_id: 'urn:li:person:4471209',
                 display_name: 'Anna Sommer',
@@ -254,8 +341,8 @@ export const CALENDAR_PAYLOAD = {
  * `SocialMetricsService::summary()`.
  *
  * A counter nobody reported stays **null**, in the totals, in the network
- * rows and in the top posts. The series omits a platform's key on a day
- * that platform reported no reach.
+ * rows and in the top posts. The series omits a network's key on a day that
+ * network reported no reach.
  */
 export const SUMMARY_PAYLOAD = {
     totals: {

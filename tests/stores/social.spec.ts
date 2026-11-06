@@ -133,9 +133,9 @@ describe('stores/social', () => {
 
         await store.loadConfig()
 
-        expect(store.rules.linkedin?.max_text).toBe(3000)
-        expect(store.rules.instagram?.max_text).toBe(2200)
-        expect(store.rules.instagram?.media_note).toBe('Instagram accepts JPEG or MP4, up to 100 MB.')
+        expect(store.rules['direct:linkedin']?.max_text).toBe(3000)
+        expect(store.rules['direct:instagram']?.max_text).toBe(2200)
+        expect(store.rules['direct:instagram']?.media_note).toBe('Instagram accepts JPEG or MP4, up to 100 MB.')
     })
 
     it('reads the config once', async () => {
@@ -259,7 +259,7 @@ describe('stores/social — the reads', () => {
         await store.loadConfig()
 
         expect(store.configError).toBeNull()
-        expect(store.rules.linkedin?.max_text).toBe(3000)
+        expect(store.rules['direct:linkedin']?.max_text).toBe(3000)
     })
 })
 

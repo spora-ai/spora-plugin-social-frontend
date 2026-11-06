@@ -18,7 +18,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { BookOpen, Plus, RefreshCw, Trash } from 'lucide-vue-next'
-import { PLATFORM_LABELS } from '../lib/platforms'
+import { brandColorVar, channelKey, networkLabel } from '../lib/platforms'
 import {
     connectionExpiryNote,
     connectionStatusClass,
@@ -49,6 +49,21 @@ const openProviders = computed(() =>
         (provider) => !props.connections.some((connection) => connection.provider === provider),
     ),
 )
+
+/** The name of the network an account is on. */
+function accountLabel(account: SocialConnection['accounts'][number]): string {
+    return networkLabel(account.platform, props.config?.rules ?? {})
+}
+
+/**
+ * The rule of the account's own channel.
+ *
+ * The same network on two routes is two channels with two sets of limits,
+ * and the account shows the one that will be enforced on it.
+ */
+function accountRule(account: SocialConnection['accounts'][number]) {
+    return props.config?.rules?.[channelKey(account.via, account.platform)]
+}
 
 /**
  * The provider's setup notice, as the backend words it.
@@ -113,8 +128,12 @@ function setupNotice(provider: Provider): ProviderSetupNotice | null {
                         :data-test="`connection-account-${account.id}`"
                     >
                         <div class="flex items-center gap-2">
-                            <span class="platform-chip" :data-platform="account.platform">
-                                {{ PLATFORM_LABELS[account.platform] }}
+                            <span
+                                class="platform-chip"
+                                :data-network="account.platform"
+                                :style="{ '--network-color': brandColorVar(account.platform) }"
+                            >
+                                {{ accountLabel(account) }}
                             </span>
                             <span class="min-w-0 flex-1 truncate text-sm font-medium">
                                 {{ account.display_name }}
@@ -123,6 +142,13 @@ function setupNotice(provider: Provider): ProviderSetupNotice | null {
                         <div class="mt-1 truncate text-xs text-muted-foreground">
                             {{ account.username }} · {{ account.kind }}
                         </div>
+                        <p
+                            v-if="accountRule(account)"
+                            class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground"
+                            :data-test="`account-rule-${account.id}`"
+                        >
+                            {{ accountRule(account)!.media_note }}
+                        </p>
                         <div v-if="account.followers !== null" class="mt-2 text-xs text-muted-foreground">
                             {{ t('Audience') }}:
                             <span class="font-medium tabular-nums text-foreground">

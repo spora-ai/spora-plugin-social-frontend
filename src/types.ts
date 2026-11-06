@@ -7,11 +7,38 @@
  * still move.
  */
 
-export type Platform = 'linkedin' | 'facebook' | 'instagram'
+/**
+ * The network a post goes to.
+ *
+ * A plain string, and deliberately so: the set is open. The plugin reaches
+ * three networks on its own and reaches the rest through an aggregator, and
+ * the aggregator's list grows without the frontend's knowledge.
+ */
+export type Network = string
 
-export type AccountKind = 'organization' | 'page' | 'member' | 'business'
+/**
+ * The route to a network — the plugin's own APIs, or an aggregator's.
+ *
+ * `direct` is the plugin's own route; an aggregator's slug is its own.
+ */
+export type Route = string
 
-export type AccountStatus = 'active' | 'expired' | 'revoked' | 'error'
+/**
+ * A network, and the route to it.
+ *
+ * The pair is the identity: the same network reached through two routes is
+ * two accounts with two tokens, and each has its own limits.
+ */
+export interface Channel {
+    /** The channel's key — the route, then the network. */
+    key: string
+    network: Network
+    via: Route
+}
+
+export type AccountKind = 'organization' | 'page' | 'member' | 'business' | 'aggregator'
+
+export type AccountStatus = 'active' | 'expired' | 'revoked' | 'error' | 'disconnected'
 
 /**
  * An account a connection covers.
@@ -24,7 +51,10 @@ export interface SocialAccount {
     id: number
     /** The same id under its own name — the backend sends both. */
     account_id: number
-    platform: Platform
+    /** The network the account is on. */
+    platform: Network
+    /** The route to it — the plugin's own, or an aggregator's. */
+    via: Route
     kind: AccountKind
     external_id: string
     display_name: string
@@ -62,6 +92,7 @@ export type ConnectionStatus = 'active' | 'expired' | 'revoked' | 'error'
 export interface SocialConnection {
     id: number
     principal_id: number
+    /** The provider the connection belongs to. */
     provider: Provider
     /** The portfolio the connection belongs to — Meta's client business id. */
     business_external_id: string | null
@@ -112,7 +143,10 @@ export interface PostMetrics {
 export interface PostTarget {
     id: number
     account_id: number
-    platform: Platform
+    /** The network the target went to. */
+    platform: Network
+    /** The route it went through. */
+    via: Route
     status: TargetStatus
     external_id: string | null
     external_url: string | null
@@ -146,7 +180,10 @@ export interface PostMedia {
 
 export interface PostAccountSummary {
     id: number
-    platform: Platform
+    /** The network the account is on. */
+    platform: Network
+    /** The route to it. */
+    via: Route
     display_name: string
 }
 
@@ -155,12 +192,17 @@ export interface SocialPost {
     principal_id: number
     title: string
     body: string
-    /** A body per platform — the drafts that work for LinkedIn and Facebook differ. */
-    platform_bodies: Partial<Record<Platform, string>>
+    /**
+     * A body per channel — the drafts that work for LinkedIn and Facebook
+     * differ, and so do the two routes to the same network.
+     *
+     * The key is the channel's key: `direct:linkedin`, `zernio:bluesky`.
+     */
+    platform_bodies: Record<string, string>
     /**
      * The tags the post carries, without their hashes.
      *
-     * The hashes are added when the post is composed for a platform, so one
+     * The hashes are added when the post is composed for a channel, so one
      * post carries them once and every network gets them the same.
      */
     hashtags: string[]
@@ -191,7 +233,8 @@ export interface CreatePostPayload {
     principal_id: number
     title: string
     body: string
-    platform_bodies?: Partial<Record<Platform, string>>
+    /** A body per channel, keyed by the channel's key. */
+    platform_bodies?: Record<string, string>
     hashtags?: string[]
     account_ids: number[]
     scheduled_for?: string | null
@@ -236,27 +279,26 @@ export interface AnalyticsTotals {
 }
 
 export interface NetworkTotals extends AnalyticsTotals {
-    platform: Platform
+    /** The network the numbers are about. */
+    platform: Network
     posts: number
 }
 
 export interface AnalyticsPoint {
     date: string
     /**
-     * The reach each network reported that day.
+     * The reach each network reported that day, keyed by the network's name.
      *
      * A key is **absent** when that network reported no reach — an absent key
      * is not a zero, and a day with one missing key must still add up.
      */
-    linkedin?: number
-    facebook?: number
-    instagram?: number
+    [network: string]: string | number | undefined
 }
 
 export interface TopPost {
     post_id: number
     title: string
-    platform: Platform
+    platform: Network
     /** Null when the network reported no reach for this post. */
     reach: number | null
     /** Null when the network reported no impressions for this post. */
@@ -297,16 +339,21 @@ export interface MediaAssetSummary {
     asset_url: string | null
 }
 
+/** One channel's verdict on an attachment. */
 export interface MediaFitResult {
-    platform: Platform
+    /** The channel's key — the route, then the network. */
+    channel: string
+    network: Network
+    via: Route
     fits: boolean
     reasons: string[]
     remedy: string | null
+    mime_type: string | null
 }
 
 export interface MediaCheckFit {
     fits: boolean
-    per_platform: MediaFitResult[]
+    per_channel: MediaFitResult[]
 }
 
 export interface MediaPrepareResult {
@@ -361,13 +408,19 @@ export interface ProviderConfig {
 }
 
 /**
- * What one platform accepts.
+ * What one channel accepts.
  *
  * The limits live in the backend — it is what refuses the publish — and they
  * travel with the config, so a badge on an attachment cannot warn about a
  * number the backend no longer enforces.
  */
 export interface PlatformRules {
+    /** The network's own name, as the operator knows it. */
+    label: string
+    /** The network the rule is about. */
+    network: Network
+    /** The route to it. */
+    via: Route
     /** The network cannot publish a post without media. */
     media_required: boolean
     /** How many attachments a post may carry. */
@@ -392,11 +445,30 @@ export interface PlatformRules {
     video_remedy: string
     /** The remedy for a file that is too large. */
     size_remedy: string
+    /**
+     * The network counts characters its own way, and the plugin cannot
+     * compute that count.
+     *
+     * Null for every network that counts code points. The composer shows the
+     * note where the number would be rather than a number it cannot stand
+     * behind.
+     */
+    counting_note: string | null
 }
+
+/**
+ * The networks the plugin reaches on its own route.
+ *
+ * The plugin's own OAuth covers these three; everything else it reaches
+ * through an aggregator. The backend's `SocialPlatform` enum is the same
+ * three, and it is what the media preparation endpoint speaks.
+ */
+export type NativeNetwork = 'linkedin' | 'facebook' | 'instagram'
 
 export interface PostQuery {
     status?: string
-    platform?: Platform
+    /** The network to filter by. */
+    platform?: Network
     account_id?: number
     limit?: number
     offset?: number
@@ -406,7 +478,8 @@ export interface SocialConfig {
     providers: Record<Provider, ProviderConfig>
     app_url: string | null
     app_url_public: boolean
-    rules: Record<Platform, PlatformRules>
+    /** The rules, keyed by the channel's key. */
+    rules: Record<string, PlatformRules>
 }
 
 /**
@@ -433,7 +506,8 @@ export interface ComposerAttachment {
 export interface PostAnalyticsTarget {
     target_id: number
     account_id: number
-    platform: Platform
+    platform: Network
+    via: Route
     status: TargetStatus
     external_id: string | null
     metrics: PostMetrics | null
@@ -448,4 +522,3 @@ export interface PostAnalytics {
     targets: PostAnalyticsTarget[]
     notes: string[]
 }
-

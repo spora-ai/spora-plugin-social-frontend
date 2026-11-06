@@ -4,7 +4,7 @@ import {
     measuredTargets,
     postEngagementRate,
     postEngagements,
-    postPlatforms,
+    postChannels,
     postReach,
 } from '../../src/lib/metrics'
 import { makeMetrics, makePost, makeTarget } from '../fixtures'
@@ -93,15 +93,34 @@ describe('lib/metrics — a null is not a zero', () => {
         expect(postEngagements(post)).toBe(26)
     })
 
-    it('names the platforms a post went to, once each', () => {
+    it('names the channels a post went to, once each', () => {
         const post = makePost({
             targets: [
-                makeTarget({ id: 501, platform: 'linkedin' }),
-                makeTarget({ id: 502, platform: 'linkedin' }),
-                makeTarget({ id: 503, platform: 'instagram' }),
+                makeTarget({ id: 501, platform: 'linkedin', via: 'direct' }),
+                makeTarget({ id: 502, platform: 'linkedin', via: 'direct' }),
+                makeTarget({ id: 503, platform: 'instagram', via: 'direct' }),
             ],
         })
 
-        expect(postPlatforms(post)).toEqual(['linkedin', 'instagram'])
+        expect(postChannels(post).map((channel) => channel.key)).toEqual([
+            'direct:linkedin',
+            'direct:instagram',
+        ])
+    })
+
+    it('keeps the two routes to one network apart', () => {
+        // The same network through two routes is two accounts, and the row
+        // has to say which one it was.
+        const post = makePost({
+            targets: [
+                makeTarget({ id: 501, platform: 'linkedin', via: 'direct' }),
+                makeTarget({ id: 502, platform: 'linkedin', via: 'zernio' }),
+            ],
+        })
+
+        expect(postChannels(post).map((channel) => channel.key)).toEqual([
+            'direct:linkedin',
+            'zernio:linkedin',
+        ])
     })
 })

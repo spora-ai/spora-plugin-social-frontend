@@ -20,7 +20,7 @@ import type {
     MediaAssetSummary,
     MediaCheckFit,
     MediaPrepareResult,
-    Platform,
+    NativeNetwork,
     Provider,
     ProviderConfig,
     ProviderSetupNotice,
@@ -120,7 +120,7 @@ export async function checkConnectionHealth(
 }
 
 /**
- * What the operator has configured, and what the platforms accept.
+ * What the operator has configured, and what the channels accept.
  *
  * The rules travel with the providers: the composer's counters and the badge
  * on an attachment read the limits from here, because the backend is what
@@ -283,20 +283,24 @@ export async function listMedia(
 export async function checkMediaFit(
     principalId: number,
     mediaAssetId: string,
-    platforms: Platform[],
+    channels: string[],
 ): Promise<MediaCheckFit> {
-    return getApi().post<MediaCheckFit>(`${BASE}/media/check-fit`, {
+    const result = await getApi().post<Partial<MediaCheckFit>>(`${BASE}/media/check-fit`, {
         principal_id: principalId,
         media_asset_id: mediaAssetId,
-        platforms,
+        channels,
     })
+    return {
+        fits: result.fits === true,
+        per_channel: result.per_channel ?? [],
+    }
 }
 
 /** Instagram's step: the JPEG derivative and the public URL Instagram will fetch. */
 export async function prepareMedia(
     principalId: number,
     mediaAssetId: string,
-    platform: Platform,
+    platform: NativeNetwork,
 ): Promise<MediaPrepareResult> {
     return getApi().post<MediaPrepareResult>(`${BASE}/media/prepare`, {
         principal_id: principalId,

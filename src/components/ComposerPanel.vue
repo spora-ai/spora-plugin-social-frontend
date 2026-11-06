@@ -36,9 +36,20 @@ import {
     type HostLinkAction,
     type PluginRouter,
 } from '../lib/hostNavigation'
-import { charCount, composeText, mediaFit, parseHashtags, platformLabel } from '../lib/platforms'
+import {
+    brandColorVar,
+    channelFromKey,
+    channelLabel,
+    channelOf,
+    charCount,
+    composeText,
+    DIRECT_ROUTE,
+    mediaFit,
+    parseHashtags,
+    routeLabel,
+} from '../lib/platforms'
 import { composePath } from '../lib/paths'
-import type { ComposerAttachment, Platform, PlatformRules, SocialPost } from '../types'
+import type { Channel, ComposerAttachment, PlatformRules, SocialPost } from '../types'
 
 const props = defineProps<{
     /** The principal the post is written for. */
@@ -53,8 +64,8 @@ const hostContext = inject(HOST_CONTEXT_KEY, null)
 
 const title = ref('')
 const body = ref('')
-/** A body per platform — the copy that fits LinkedIn does not fit Facebook. */
-const platformBodies = ref<Partial<Record<Platform, string>>>({})
+/** A body per channel — the copy that fits LinkedIn does not fit Bluesky. */
+const channelBodies = ref<Record<string, string>>({})
 /** The hashtags as the operator typed them; the hashes are added on the way out. */
 const hashtagInput = ref('')
 const attachments = ref<ComposerAttachment[]>([])
@@ -66,8 +77,8 @@ const timezone = ref('Europe/Berlin')
 const submitting = ref(false)
 /** The agent write in flight — the panel's send, not the post's. */
 const drafting = ref(false)
-/** The platform whose own text the Message box edits — null for the shared body. */
-const editingPlatform = ref<Platform | null>(null)
+/** The channel whose own text the Message box edits — null for the shared body. */
+const editingChannel = ref<string | null>(null)
 /** The post could not be read, so there is nothing to edit. */
 const postError = ref<string | null>(null)
 /** The post is being read. */
@@ -88,15 +99,24 @@ const timezones = computed(() =>
 /** The accounts the operator may publish to: the ones with a live token. */
 const publishableAccounts = computed(() => social.accounts.filter((account) => account.status === 'active'))
 
-/** The platforms the post currently targets — the media fit is judged on these. */
-const targetedPlatforms = computed<Platform[]>(() => {
-    const platforms: Platform[] = []
+/**
+ * The channels the post currently targets — the media fit is judged on these.
+ *
+ * A channel is the network *and* the route: the same network through two
+ * routes is two accounts, and each has its own limits.
+ */
+const targetedChannels = computed<Channel[]>(() => {
+    const channels: Channel[] = []
     for (const account of publishableAccounts.value) {
         if (!targetIds.value.includes(account.id)) continue
-        if (!platforms.includes(account.platform)) platforms.push(account.platform)
+        const channel = channelOf(account.via, account.platform)
+        if (!channels.some((existing) => existing.key === channel.key)) channels.push(channel)
     }
-    return platforms
+    return channels
 })
+
+/** The keys of the targeted channels — what the rules and the media strip read. */
+const targetedChannelKeys = computed(() => targetedChannels.value.map((channel) => channel.key))
 
 const targetSummary = computed(() => {
     const count = targetIds.value.length
@@ -104,22 +124,22 @@ const targetSummary = computed(() => {
 })
 
 /**
- * The message the Message box edits: the shared body, or one network's own.
+ * The message the Message box edits: the shared body, or one channel's own.
  *
  * The box is the only writing surface, so it edits whichever of the two the
  * operator picked — what they type is what goes out.
  */
 const message = computed({
     get: (): string => {
-        if (editingPlatform.value === null) return body.value
-        return platformBodies.value[editingPlatform.value] ?? ''
+        if (editingChannel.value === null) return body.value
+        return channelBodies.value[editingChannel.value] ?? ''
     },
     set: (value: string): void => {
-        if (editingPlatform.value === null) {
+        if (editingChannel.value === null) {
             body.value = value
             return
         }
-        platformBodies.value = { ...platformBodies.value, [editingPlatform.value]: value }
+        channelBodies.value = { ...channelBodies.value, [editingChannel.value]: value }
     },
 })
 
@@ -129,57 +149,76 @@ const hashtags = computed(() => parseHashtags(hashtagInput.value))
 /** The tags as they will read under the message. */
 const hashtagText = computed(() => hashtags.value.map((tag) => `#${tag}`).join(' '))
 
-/** Whether a network has a wording of its own — the shared one is not its own. */
-function hasOwnText(platform: Platform): boolean {
-    const own = platformBodies.value[platform]
+/** Whether a channel has a wording of its own — the shared one is not its own. */
+function hasOwnText(key: string): boolean {
+    const own = channelBodies.value[key]
     return own !== undefined && own !== ''
 }
 
 /**
- * The text a network will publish — its own wording when it has one.
+ * The text a channel will publish — its own wording when it has one.
  *
  * An empty own wording is no wording: the backend falls back to the shared
  * body for it, so the preview must not show an empty post either.
  */
-function bodyFor(platform: Platform): string {
-    if (!hasOwnText(platform)) return body.value
-    return platformBodies.value[platform] ?? ''
+function bodyFor(key: string): string {
+    if (!hasOwnText(key)) return body.value
+    return channelBodies.value[key] ?? ''
 }
 
 /**
- * The rule the backend enforces for one platform.
+ * The rule the backend enforces for one channel.
  *
  * Undefined until the config has been read, and undefined for good when it
  * could not be: the composer says so rather than judging the body against a
  * limit of its own.
  */
-function ruleFor(platform: Platform): PlatformRules | undefined {
-    return social.rules[platform]
+function ruleFor(channel: Channel): PlatformRules | undefined {
+    return social.rules[channel.key]
 }
 
 /**
- * One row of the preview: the network, its rule and what the rule says
+ * The title a channel is named by in the composer.
+ *
+ * The route rides along when it is not the plugin's own, because the same
+ * network on two routes is two channels with two bodies — and "LinkedIn"
+ * alone would name neither of them.
+ */
+function channelTitle(channel: Channel): string {
+    const label = channelLabel(channel, social.rules)
+    if (channel.via === DIRECT_ROUTE) return label
+    return `${label} · ${routeLabel(channel.via)}`
+}
+
+/** The title of the channel whose own text the Message box edits. */
+const editingTitle = computed(() =>
+    editingChannel.value === null ? '' : channelTitle(channelFromKey(editingChannel.value)),
+)
+
+/**
+ * One row of the preview: the channel, its rule and what the rule says
  * about this post.
  *
  * The count is null while the rules are unknown, and the media is judged
  * only once the rule is there.
  */
 const previews = computed(() =>
-    targetedPlatforms.value.map((platform) => {
-        const rule = ruleFor(platform)
+    targetedChannels.value.map((channel) => {
+        const rule = ruleFor(channel)
         // The count is on the composed text: the hashtags go out with the
         // body, so they are part of what the limit is checked against.
         const count =
             rule === undefined
                 ? null
-                : charCount(composeText(bodyFor(platform), hashtags.value), rule.max_text)
+                : charCount(composeText(bodyFor(channel.key), hashtags.value), rule.max_text)
 
         return {
-            platform,
-            label: platformLabel(platform),
+            channel,
+            title: channelTitle(channel),
+            label: channelLabel(channel, social.rules),
             rule,
             count,
-            ownText: hasOwnText(platform),
+            ownText: hasOwnText(channel.key),
             mediaRequired: rule?.media_required === true,
             mediaCount: rule?.media_count ?? null,
             fetchesMedia: rule?.fetches_media === true,
@@ -200,44 +239,44 @@ const canPublish = computed(
     () =>
         targetIds.value.length > 0 &&
         (body.value.trim() !== '' ||
-            Object.values(platformBodies.value).some(
+            Object.values(channelBodies.value).some(
                 (own) => own !== undefined && own.trim() !== '',
             ) ||
             attachments.value.length > 0),
 )
 
 /**
- * Give a network a wording of its own.
+ * Give a channel a wording of its own.
  *
  * It starts as a copy of the shared body, so the operator edits the text
  * they already wrote rather than writing it again.
  */
-function giveOwnText(platform: Platform): void {
-    platformBodies.value = { ...platformBodies.value, [platform]: body.value }
-    editingPlatform.value = platform
+function giveOwnText(key: string): void {
+    channelBodies.value = { ...channelBodies.value, [key]: body.value }
+    editingChannel.value = key
 }
 
-/** Edit the wording a network already has of its own. */
-function editOwnText(platform: Platform): void {
-    editingPlatform.value = platform
+/** Edit the wording a channel already has of its own. */
+function editOwnText(key: string): void {
+    editingChannel.value = key
 }
 
 /**
- * Drop a network's own wording and go back to the shared body.
+ * Drop a channel's own wording and go back to the shared body.
  *
- * The wording is gone, not merely hidden: the network publishes the shared
+ * The wording is gone, not merely hidden: the channel publishes the shared
  * body again, the way it did before.
  */
-function useSharedText(platform: Platform): void {
-    const next = { ...platformBodies.value }
-    delete next[platform]
-    platformBodies.value = next
-    editingPlatform.value = null
+function useSharedText(key: string): void {
+    const next = { ...channelBodies.value }
+    delete next[key]
+    channelBodies.value = next
+    editingChannel.value = null
 }
 
-/** Leave the network's own wording without dropping it. */
+/** Leave the channel's own wording without dropping it. */
 function editSharedText(): void {
-    editingPlatform.value = null
+    editingChannel.value = null
 }
 
 /**
@@ -492,7 +531,7 @@ async function sendToAgent(): Promise<void> {
 function applyPost(post: SocialPost): void {
     title.value = post.title
     body.value = post.body
-    platformBodies.value = { ...post.platform_bodies }
+    channelBodies.value = { ...post.platform_bodies }
     hashtagInput.value = post.hashtags.map((tag) => `#${tag}`).join(' ')
     targetIds.value = post.accounts.map((account) => account.id)
     attachments.value = post.media.map((media) => ({
@@ -529,11 +568,11 @@ function applyPost(post: SocialPost): void {
 function resetSurface(): void {
     title.value = ''
     body.value = ''
-    platformBodies.value = {}
+    channelBodies.value = {}
     hashtagInput.value = ''
     attachments.value = []
     targetIds.value = []
-    editingPlatform.value = null
+    editingChannel.value = null
     mode.value = 'schedule'
     date.value = new Date().toISOString().slice(0, 10)
     time.value = '09:00'
@@ -608,7 +647,7 @@ async function submit(): Promise<void> {
             principal_id: props.principalId,
             title: title.value,
             body: body.value,
-            platform_bodies: platformBodies.value,
+            platform_bodies: channelBodies.value,
             hashtags: hashtags.value,
             account_ids: targetIds.value,
             scheduled_for: scheduledFor,
@@ -812,13 +851,13 @@ async function submit(): Promise<void> {
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <label class="field-label" for="cmp-body" data-test="message-label">
                             {{
-                                editingPlatform === null
+                                editingChannel === null
                                     ? t('Shared message')
-                                    : t('Message for {platform}', { platform: platformLabel(editingPlatform) })
+                                    : t('Message for {channel}', { channel: editingTitle })
                             }}
                         </label>
                         <button
-                            v-if="editingPlatform !== null"
+                            v-if="editingChannel !== null"
                             type="button"
                             class="text-[11px] underline underline-offset-2"
                             data-test="back-to-shared"
@@ -829,7 +868,7 @@ async function submit(): Promise<void> {
                     </div>
                     <p class="mt-1 text-[11px] text-muted-foreground" data-test="message-hint">
                         {{
-                            editingPlatform === null
+                            editingChannel === null
                                 ? t('Every network publishes this text.')
                                 : t('This network publishes this text instead of the shared one.')
                         }}
@@ -869,7 +908,7 @@ async function submit(): Promise<void> {
                     </div>
                     <MediaStrip
                         :attachments="attachments"
-                        :platforms="targetedPlatforms"
+                        :channels="targetedChannelKeys"
                         :rules="social.rules"
                         @remove="removeAttachment"
                     />
@@ -882,7 +921,7 @@ async function submit(): Promise<void> {
                     </div>
 
                     <div class="mt-3">
-                        <AccountPicker v-model="targetIds" :accounts="publishableAccounts" />
+                        <AccountPicker v-model="targetIds" :accounts="publishableAccounts" :config="social.config" />
                     </div>
                 </div>
             </div>
@@ -891,7 +930,7 @@ async function submit(): Promise<void> {
                 <div class="surface-card p-4">
                     <span class="field-label">{{ t('Platform preview') }}</span>
                     <div class="space-y-3">
-                        <p v-if="targetedPlatforms.length === 0" class="text-xs text-muted-foreground">
+                        <p v-if="targetedChannels.length === 0" class="text-xs text-muted-foreground">
                             {{ t('Pick at least one account to see the per-platform preview — limits, media fit, and whether the media needs converting.') }}
                         </p>
 
@@ -905,14 +944,26 @@ async function submit(): Promise<void> {
 
                         <div
                             v-for="preview in previews"
-                            :key="preview.platform"
+                            :key="preview.channel.key"
                             class="rounded-lg border border-border p-2.5"
-                            :data-test="`preview-${preview.platform}`"
+                            :data-test="`preview-${preview.channel.key}`"
                         >
                             <div class="flex items-center justify-between gap-2">
-                                <span class="platform-chip" :data-platform="preview.platform">
-                                    {{ preview.label }}
-                                </span>
+                                <div class="flex min-w-0 items-center gap-1.5">
+                                    <span
+                                        class="platform-chip"
+                                        :data-network="preview.channel.network"
+                                        :style="{ '--network-color': brandColorVar(preview.channel.network) }"
+                                    >
+                                        {{ preview.label }}
+                                    </span>
+                                    <span
+                                        class="truncate text-[11px] text-muted-foreground"
+                                        :data-test="`preview-route-${preview.channel.key}`"
+                                    >
+                                        {{ routeLabel(preview.channel.via) }}
+                                    </span>
+                                </div>
                                 <div class="flex items-center gap-2">
                                     <span
                                         v-if="hashtags.length > 0"
@@ -952,8 +1003,8 @@ async function submit(): Promise<void> {
                             </p>
 
                             <p class="mt-1.5 line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">
-                                <span v-if="bodyFor(preview.platform) === ''" class="italic">{{ t('No message yet') }}</span>
-                                <span v-else>{{ bodyFor(preview.platform) }}</span>
+                                <span v-if="bodyFor(preview.channel.key) === ''" class="italic">{{ t('No message yet') }}</span>
+                                <span v-else>{{ bodyFor(preview.channel.key) }}</span>
                             </p>
 
                             <div class="mt-2 flex flex-wrap gap-1">
@@ -996,8 +1047,8 @@ async function submit(): Promise<void> {
                                     v-if="!preview.ownText"
                                     type="button"
                                     class="inline-flex h-7 items-center rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
-                                    :data-test="`platform-own-text-${preview.platform}`"
-                                    @click="giveOwnText(preview.platform)"
+                                    :data-test="`platform-own-text-${preview.channel.key}`"
+                                    @click="giveOwnText(preview.channel.key)"
                                 >
                                     {{ t('Its own text') }}
                                 </button>
@@ -1005,8 +1056,8 @@ async function submit(): Promise<void> {
                                     v-else
                                     type="button"
                                     class="inline-flex h-7 items-center rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
-                                    :data-test="`platform-edit-${preview.platform}`"
-                                    @click="editOwnText(preview.platform)"
+                                    :data-test="`platform-edit-${preview.channel.key}`"
+                                    @click="editOwnText(preview.channel.key)"
                                 >
                                     {{ t('Edit') }}
                                 </button>
@@ -1014,8 +1065,8 @@ async function submit(): Promise<void> {
                                     v-if="preview.ownText"
                                     type="button"
                                     class="inline-flex h-7 items-center rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
-                                    :data-test="`platform-use-shared-${preview.platform}`"
-                                    @click="useSharedText(preview.platform)"
+                                    :data-test="`platform-use-shared-${preview.channel.key}`"
+                                    @click="useSharedText(preview.channel.key)"
                                 >
                                     {{ t('Use the shared message') }}
                                 </button>

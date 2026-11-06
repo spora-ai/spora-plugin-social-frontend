@@ -2,12 +2,12 @@
 /**
  * The attachments on the composer.
  *
- * Each one carries its fit state **for the platforms currently targeted**, so a
+ * Each one carries its fit state **for the channels currently targeted**, so a
  * PNG attached while Instagram is among the targets says so *on the
  * attachment* — the operator can act on that, and it is not something they
  * have to find in the preview column.
  *
- * The badge quotes the backend: the note is the platform's media rule in the
+ * The badge quotes the backend: the note is the network's media rule in the
  * backend's words and the remedy is the action the backend names. A badge
  * that phrased the rule differently would put two sentences about the same
  * file on the screen.
@@ -19,14 +19,14 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { TriangleAlert, X } from 'lucide-vue-next'
 import { mediaFit } from '../lib/platforms'
-import type { ComposerAttachment, Platform, PlatformRules } from '../types'
+import type { ComposerAttachment, PlatformRules } from '../types'
 
 const props = defineProps<{
     attachments: ComposerAttachment[]
-    /** The platforms the post currently targets. */
-    platforms: Platform[]
+    /** The channels the post currently targets. */
+    channels: string[]
     /** The rules the backend sent — the badge quotes them. */
-    rules: Partial<Record<Platform, PlatformRules>>
+    rules: Record<string, PlatformRules>
 }>()
 
 const emit = defineEmits<{
@@ -36,20 +36,20 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 /**
- * The platforms this attachment does not fit, with the remedy for each.
+ * The channels this attachment does not fit, with the remedy for each.
  *
- * A platform whose rule has not arrived is left out: without the rule there
+ * A channel whose rule has not arrived is left out: without the rule there
  * is nothing to judge the file against.
  */
 const problems = computed(() => {
-    const map = new Map<string, { platform: Platform; reason: string; remedy: string }[]>()
+    const map = new Map<string, { channel: string; reason: string; remedy: string }[]>()
     for (const attachment of props.attachments) {
-        const failures = props.platforms
-            .map((platform) => {
-                const rule = props.rules[platform]
+        const failures = props.channels
+            .map((channel) => {
+                const rule = props.rules[channel]
                 if (rule === undefined) return null
                 const fit = mediaFit(attachment, rule)
-                return fit.fits ? null : { platform, reason: fit.reason, remedy: fit.remedy }
+                return fit.fits ? null : { channel, reason: fit.reason, remedy: fit.remedy }
             })
             .filter((failure) => failure !== null)
         if (failures.length > 0) map.set(attachment.media_asset_id, failures)
@@ -57,7 +57,7 @@ const problems = computed(() => {
     return map
 })
 
-function problemsFor(mediaAssetId: string): { platform: Platform; reason: string; remedy: string }[] {
+function problemsFor(mediaAssetId: string): { channel: string; reason: string; remedy: string }[] {
     return problems.value.get(mediaAssetId) ?? []
 }
 
@@ -82,9 +82,9 @@ function mimeLabel(mime: string): string {
                 <span class="block max-w-[9rem] truncate text-[11px] font-medium">{{ attachment.filename }}</span>
                 <span
                     v-for="problem in problemsFor(attachment.media_asset_id)"
-                    :key="problem.platform"
+                    :key="problem.channel"
                     class="pill pill-partial mt-0.5"
-                    :data-test="`media-fit-${attachment.media_asset_id}-${problem.platform}`"
+                    :data-test="`media-fit-${attachment.media_asset_id}-${problem.channel}`"
                 >
                     <TriangleAlert class="h-3 w-3" />
                     {{ problem.reason }} · {{ problem.remedy }}

@@ -17,13 +17,15 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { chartColorVar, platformLabel } from '../lib/platforms'
+import { brandColorVar, chartColorVar, networkLabel } from '../lib/platforms'
 import { formatCounter } from '../lib/metrics'
 import { NO_VALUE } from '../lib/format'
-import type { AnalyticsPoint, AnalyticsSummary, NetworkTotals, Platform } from '../types'
+import type { AnalyticsPoint, AnalyticsSummary, NetworkTotals, Network, SocialConfig } from '../types'
 
 const props = defineProps<{
     summary: AnalyticsSummary | null
+    /** The plugin's configuration — it carries the networks' names. */
+    config: SocialConfig | null
 }>()
 
 const { t } = useI18n()
@@ -35,18 +37,38 @@ const series = computed(() => props.summary?.series ?? [])
 const topPosts = computed(() => props.summary?.top_posts ?? [])
 
 /**
+ * The networks the chart stacks.
+ *
+ * The series is keyed by the network's name, and the days carry whichever
+ * networks reported that day — so the stack follows the data rather than a
+ * fixed list of networks, which the aggregator's fifteen would outgrow.
+ */
+const seriesNetworks = computed<Network[]>(() => {
+    const names = new Set<Network>()
+
+    for (const day of series.value) {
+        for (const key of Object.keys(day)) {
+            if (key !== 'date') names.add(key)
+        }
+    }
+
+    return [...names]
+})
+
+/**
  * The reach a network reported that day.
  *
  * An absent key means that network reported nothing — it is not a zero, but
  * for the height of a bar the two are the same amount of nothing.
  */
-function dayReach(day: AnalyticsPoint, platform: Platform): number {
-    return day[platform] ?? 0
+function dayReach(day: AnalyticsPoint, network: Network): number {
+    const reach = day[network]
+    return typeof reach === 'number' ? reach : 0
 }
 
 /** The day's reach across the networks that reported one. */
 function dayTotal(day: AnalyticsPoint): number {
-    return dayReach(day, 'linkedin') + dayReach(day, 'facebook') + dayReach(day, 'instagram')
+    return seriesNetworks.value.reduce((sum, network) => sum + dayReach(day, network), 0)
 }
 
 /** The tallest day in the series — the chart's scale. */
@@ -110,10 +132,10 @@ function rate(network: NetworkTotals): number | null {
 }
 
 /** The share of a day's reach that one network holds — the stack's segments. */
-function share(day: AnalyticsPoint, platform: Platform): number {
+function share(day: AnalyticsPoint, network: Network): number {
     const total = dayTotal(day)
     if (total <= 0) return 0
-    return (dayReach(day, platform) / total) * 100
+    return (dayReach(day, network) / total) * 100
 }
 
 function height(day: AnalyticsPoint): number {
@@ -158,12 +180,11 @@ function height(day: AnalyticsPoint): number {
                 <div class="surface-card p-3.5" data-test="kpi-best-network">
                     <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('Best network') }}</div>
                     <div class="mt-1 text-xl font-semibold">
-                        {{ bestNetwork === null ? '—' : platformLabel(bestNetwork.platform) }}
+                        {{ bestNetwork === null ? '—' : networkLabel(bestNetwork.platform, props.config?.rules ?? {}) }}
                     </div>
                     <div class="mt-0.5 text-[11px] text-muted-foreground">{{ t('by reach') }}</div>
                 </div>
             </div>
-
             <div class="surface-card p-4" data-test="reach-chart">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -179,9 +200,9 @@ function height(day: AnalyticsPoint): number {
                         >
                             <span
                                 class="h-2.5 w-2.5 rounded-sm"
-                                :style="{ background: `hsl(${chartColorVar(network.platform)})` }"
+                                :style="{ background: chartColorVar(network.platform) }"
                             />
-                            {{ platformLabel(network.platform) }}
+                            {{ networkLabel(network.platform, props.config?.rules ?? {}) }}
                         </span>
                     </div>
                 </div>
@@ -196,12 +217,12 @@ function height(day: AnalyticsPoint): number {
                     >
                         <div class="flex flex-col justify-end" :style="{ height: `${height(day)}%` }">
                             <span
-                                v-for="platform in (['linkedin', 'facebook', 'instagram'] as Platform[])"
-                                :key="platform"
+                                v-for="network in seriesNetworks"
+                                :key="network"
                                 class="block w-full"
                                 :style="{
-                                    height: `${share(day, platform)}%`,
-                                    background: `hsl(${chartColorVar(platform)})`,
+                                    height: `${share(day, network)}%`,
+                                    background: chartColorVar(network),
                                 }"
                             />
                         </div>
@@ -233,8 +254,12 @@ function height(day: AnalyticsPoint): number {
                             :data-test="`network-row-${network.platform}`"
                         >
                             <td class="px-3 py-2.5">
-                                <span class="platform-chip" :data-platform="network.platform">
-                                    {{ platformLabel(network.platform) }}
+                                <span
+                                    class="platform-chip"
+                                    :data-network="network.platform"
+                                    :style="{ '--network-color': brandColorVar(network.platform) }"
+                                >
+                                    {{ networkLabel(network.platform, props.config?.rules ?? {}) }}
                                 </span>
                             </td>
                             <td
@@ -288,7 +313,7 @@ function height(day: AnalyticsPoint): number {
                                 <td class="px-3 py-2.5">
                                     <div class="font-medium">{{ post.title }}</div>
                                     <div class="mt-0.5 text-[11px] text-muted-foreground">
-                                        {{ platformLabel(post.platform) }}
+                                        {{ networkLabel(post.platform, props.config?.rules ?? {}) }}
                                     </div>
                                 </td>
                                 <td

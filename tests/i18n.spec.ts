@@ -35,11 +35,14 @@ describe('the catalogue', () => {
         expect(empty).toEqual([])
     })
 
-    it('keeps the network names untranslated — they are the platforms’ own', () => {
+    it('keeps the network names out of the catalogue — they come with the rules', () => {
         const source = readFileSync(join(process.cwd(), 'src/lib/platforms.ts'), 'utf8')
-        expect(source).toContain("'LinkedIn'")
-        expect(source).toContain("'Instagram'")
-        // They are labels, so they must not be in the catalogue.
+
+        // The backend names the networks, and it sends the names with the
+        // rules. A copy here is a name nobody updates.
+        expect(source).not.toContain("'LinkedIn'")
+        expect(source).not.toContain("'Instagram'")
+        // They are labels, so they must not be in the catalogue either.
         expect(en).not.toHaveProperty('LinkedIn')
         expect(en).not.toHaveProperty('Instagram')
     })

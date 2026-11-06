@@ -7,8 +7,9 @@
  * LinkedIn member post reports reactions and nothing else; showing it a reach
  * of zero would be a false reading, not a rounding.
  */
-import type { SocialPost } from '../types'
+import type { Channel, SocialPost } from '../types'
 import { NO_VALUE } from './format'
+import { channelOf } from './platforms'
 
 /**
  * A counter, or a dash when the platform did not report it.
@@ -74,11 +75,19 @@ export function postEngagementRate(post: SocialPost): number | null {
     return postEngagements(post) / reach
 }
 
-/** The platforms a post went to, in the platform order the UI uses. */
-export function postPlatforms(post: SocialPost): string[] {
-    const platforms: string[] = []
+/**
+ * The channels a post went to.
+ *
+ * The channel is the network *and* the route: the same network through two
+ * routes is two accounts, and the row has to say which one it was.
+ */
+export function postChannels(post: SocialPost): Channel[] {
+    const channels: Channel[] = []
+
     for (const target of post.targets) {
-        if (!platforms.includes(target.platform)) platforms.push(target.platform)
+        const channel = channelOf(target.via, target.platform)
+        if (!channels.some((existing) => existing.key === channel.key)) channels.push(channel)
     }
-    return platforms
+
+    return channels
 }
