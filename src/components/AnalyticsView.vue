@@ -131,9 +131,11 @@ const summedEngagements = computed(() =>
 /** The channel with the most reach, among the ones that reported any. */
 const bestRow = computed<NetworkTotals | null>(() => {
     const reporting = rows.value.filter((row) => row.reach !== null)
-    if (reporting.length === 0) return null
-    return reporting.reduce((best, row) =>
-        (row.reach ?? 0) > (best.reach ?? 0) ? row : best,
+    const first = reporting[0]
+    if (first === undefined) return null
+    return reporting.reduce(
+        (best, row) => ((row.reach ?? 0) > (best.reach ?? 0) ? row : best),
+        first,
     )
 })
 
