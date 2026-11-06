@@ -210,6 +210,22 @@ describe('AnalyticsView', () => {
         expect(headers.length).toBeGreaterThan(0)
         expect(headers.map((header) => header.text())).toContain('Post')
     })
+
+    it('reads a post once, not once per reading', () => {
+        // The backend's rows are one per metric reading — the daily
+        // collector writes a row per day — so the same post arrives ten
+        // times with a different reach each.
+        const readings = Array.from({ length: 10 }, (_, day) => ({
+            ...SUMMARY_PAYLOAD.top_posts[0]!,
+            reach: 4820 - day,
+        }))
+
+        const wrapper = mountComponent(AnalyticsView, {
+            summary: { ...SUMMARY_PAYLOAD, top_posts: readings },
+        })
+
+        expect(wrapper.findAll('[data-test="top-post-reach-88"]')).toHaveLength(1)
+    })
 })
 
 describe('AnalyticsView — two routes to one network', () => {

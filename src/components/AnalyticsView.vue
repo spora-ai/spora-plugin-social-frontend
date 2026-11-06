@@ -29,7 +29,7 @@ import {
     networkLabel,
     routeLabel,
 } from '../lib/platforms'
-import { formatCounter } from '../lib/metrics'
+import { formatCounter, topPostRows } from '../lib/metrics'
 import { NO_VALUE } from '../lib/format'
 import type { AnalyticsPoint, AnalyticsSummary, Channel, NetworkTotals, SocialConfig } from '../types'
 
@@ -46,7 +46,13 @@ const rows = computed<NetworkTotals[]>(() => props.summary?.by_network ?? [])
 
 const series = computed(() => props.summary?.series ?? [])
 
-const topPosts = computed(() => props.summary?.top_posts ?? [])
+/**
+ * The top posts, one row per post and channel.
+ *
+ * The backend's rows are one per metric reading, so the same post arrives
+ * once per day — folded here, so the operator reads one post once.
+ */
+const topPosts = computed(() => topPostRows(props.summary?.top_posts ?? []))
 
 const rules = computed(() => props.config?.rules ?? {})
 
@@ -352,7 +358,7 @@ function height(day: AnalyticsPoint): number {
                         <tbody>
                             <tr
                                 v-for="post in topPosts"
-                                :key="`${post.post_id}:${post.via}:${post.platform}`"
+                                :key="post.key"
                                 class="border-b border-border last:border-b-0 transition-colors hover:bg-muted/30"
                             >
                                 <td class="px-3 py-2.5">

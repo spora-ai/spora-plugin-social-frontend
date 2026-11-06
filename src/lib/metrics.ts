@@ -7,7 +7,7 @@
  * LinkedIn member post reports reactions and nothing else; showing it a reach
  * of zero would be a false reading, not a rounding.
  */
-import type { Channel, SocialPost } from '../types'
+import type { Channel, SocialPost, TopPost } from '../types'
 import { NO_VALUE } from './format'
 import { channelOf, uniqueChannels } from './platforms'
 
@@ -84,4 +84,39 @@ export function postEngagementRate(post: SocialPost): number | null {
  */
 export function postChannels(post: SocialPost): Channel[] {
     return uniqueChannels(post.targets.map((target) => channelOf(target.via, target.platform)))
+}
+
+/**
+ * A top post's row, with the key it is rendered under.
+ */
+export interface TopPostRow extends TopPost {
+    /** The post, the route and the network — the three the row is folded by. */
+    key: string
+}
+
+/**
+ * The top posts, one row per post and channel.
+ *
+ * **The backend's rows are one per reading, not one per post.** The daily
+ * collector writes a row per day, so a post on one account arrives once per
+ * day in the window — up to thirty rows for the same post, each with its own
+ * reach. The rows are folded by the post, the route and the network, and the
+ * first of them is the one kept: the backend sorts them by reach, so it is
+ * the reading that reached the most people.
+ *
+ * The key is those same three, so two rows can never wear the same key —
+ * and the row that was first keeps its key when the list is re-ordered.
+ */
+export function topPostRows(posts: TopPost[]): TopPostRow[] {
+    const rows: TopPostRow[] = []
+    const seen = new Set<string>()
+
+    for (const post of posts) {
+        const key = `${post.post_id}:${post.via}:${post.platform}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        rows.push({ ...post, key })
+    }
+
+    return rows
 }
