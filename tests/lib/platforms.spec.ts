@@ -11,6 +11,7 @@ import {
     charCount,
     composeText,
     mediaFit,
+    NETWORKS_WITH_A_COLOUR,
     networkLabel,
     networksOnTwoRoutes,
     parseHashtags,
@@ -294,21 +295,22 @@ describe('lib/platforms — the colours', () => {
 
     it('names the networks with a hand-picked hue, and the stylesheet agrees', () => {
         // The stylesheet declares the hues; the list here names the networks
-        // they belong to. A name here with no variable there would render an
-        // invisible chip, and a variable there with no name here would be
-        // dead CSS.
+        // they belong to. The two have to be the same set, both ways.
         const stylesheet = readFileSync(join(process.cwd(), 'src/style.css'), 'utf8')
 
-        for (const network of ['linkedin', 'facebook', 'instagram']) {
+        for (const network of NETWORKS_WITH_A_COLOUR) {
             expect(stylesheet).toContain(`--platform-${network}:`)
             expect(stylesheet).toContain(`--chart-${network}:`)
         }
 
-        const declared = [...stylesheet.matchAll(/--(?:platform|chart)-([a-z]+):/g)].map(
-            (match) => match[1]!,
+        const declared = new Set(
+            [...stylesheet.matchAll(/--(?:platform|chart)-([a-z]+):/g)].map((match) => match[1]!),
         )
 
-        expect([...new Set(declared)].sort()).toEqual(['facebook', 'instagram', 'linkedin'])
+        // A name here with no variable there renders an invisible chip...
+        expect([...NETWORKS_WITH_A_COLOUR].filter((network) => !declared.has(network))).toEqual([])
+        // ...and a variable there with no name here is dead CSS.
+        expect([...declared].filter((network) => !NETWORKS_WITH_A_COLOUR.has(network))).toEqual([])
     })
 })
 

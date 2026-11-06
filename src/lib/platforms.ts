@@ -164,10 +164,12 @@ export function networksOnTwoRoutes(channels: Channel[]): string[] {
  * chart series got a set of their own. Every other network's colour is
  * hashed from its name, so a network the backend adds needs no line of CSS.
  *
- * `tests/lib/platforms.spec.ts` checks this list against the stylesheet: a
- * name here with no variable there renders an invisible chip.
+ * `tests/lib/platforms.spec.ts` pins this list to the stylesheet: the two
+ * have to be the same set, both ways. A name here with no variable there
+ * renders an invisible chip, and a variable there with no name here is
+ * dead CSS.
  */
-const NETWORKS_WITH_A_COLOUR = new Set(['linkedin', 'facebook', 'instagram'])
+export const NETWORKS_WITH_A_COLOUR = new Set(['linkedin', 'facebook', 'instagram'])
 
 /**
  * How much lighter an aggregator's route is than the plugin's own.
