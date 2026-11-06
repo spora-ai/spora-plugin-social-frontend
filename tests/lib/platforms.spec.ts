@@ -166,7 +166,7 @@ describe('lib/platforms — the channel', () => {
     it('names a channel while the rules have not arrived', () => {
         // The rules are unknown, not refused: until the config has been read
         // there is no row for any channel, and an empty chip says nothing.
-        expect(channelLabel(channelFromKey('direct:linkedin'), {})).toBe('linkedin')
+        expect(channelLabel(channelFromKey('direct:linkedin'), {})).toBe('LinkedIn')
     })
 
     it('names a network from any of its channels', () => {

@@ -34,6 +34,15 @@ import {
 } from '../lib/providers'
 import type { Provider, ProviderSetupNotice, SocialConfig, SocialConnection } from '../types'
 
+/**
+ * A card of the screen: a connection's, or a provider's.
+ *
+ * One list, so the order of the screen is one order and not two.
+ */
+type Card =
+    | { kind: 'connection'; key: string; connection: SocialConnection }
+    | { kind: 'provider'; key: string; provider: Provider }
+
 const props = defineProps<{
     connections: SocialConnection[]
     config: SocialConfig | null
@@ -59,18 +68,36 @@ const openProviders = computed(() =>
 )
 
 /**
- * The connections, the native ones first and the aggregators after.
+ * The cards of the screen, in the order they are drawn.
  *
- * An aggregator is an extra, not a peer: the operator connects the providers
- * Spora publishes through itself, and the aggregator is what reaches the rest.
+ * The native connections come first, then the providers the operator can
+ * still connect, and the aggregator's connections after them: an aggregator
+ * is an extra, not a peer of the providers the operator connects themselves,
+ * and it is not a peer of a provider card either.
  */
-const orderedConnections = computed(() => {
-    const native = props.connections.filter((connection) => isNativeProvider(connection.provider))
-    const aggregators = props.connections.filter(
-        (connection) => !isNativeProvider(connection.provider),
-    )
-    return [...native, ...aggregators]
-})
+const cards = computed<Card[]>(() => [
+    ...props.connections
+        .filter((connection) => isNativeProvider(connection.provider))
+        .map(
+            (connection): Card => ({
+                kind: 'connection',
+                key: `connection-${connection.id}`,
+                connection,
+            }),
+        ),
+    ...openProviders.value.map(
+        (provider): Card => ({ kind: 'provider', key: `provider-${provider}`, provider }),
+    ),
+    ...props.connections
+        .filter((connection) => !isNativeProvider(connection.provider))
+        .map(
+            (connection): Card => ({
+                kind: 'connection',
+                key: `connection-${connection.id}`,
+                connection,
+            }),
+        ),
+])
 
 /**
  * The aggregators that are not set up yet.
@@ -122,8 +149,10 @@ function accountLabel(account: SocialConnection['accounts'][number]): string {
  * The rule of the account's own channel.
  *
  * The aggregator's rows are the aggregator's limits, and they differ from
- * the plugin's own for the same network — so the account shows the rule that
- * will be enforced on it.
+ * the plugin's own for the same network — so the aggregator's accounts show
+ * the rule that will be enforced on them. A native account does not: the
+ * plugin's own limits are the network's own, and a limit is not what an
+ * account card is for.
  */
 function accountRule(account: SocialConnection['accounts'][number]) {
     return props.config?.rules?.[channelKey(account.via, account.platform)]
@@ -178,208 +207,208 @@ function saveAggregator(): void {
         </div>
 
         <div class="space-y-5">
-            <section
-                v-for="connection in orderedConnections"
-                :key="connection.id"
-                class="surface-card p-4"
-                :data-test="`connection-${connection.id}`"
-            >
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="provider-chip" :data-provider="connection.provider">
-                        {{ connectionLabel(connection) }}
-                    </span>
-                    <span
-                        v-if="isAggregator(connection)"
-                        class="pill pill-neutral"
-                        data-test="aggregator-chip"
-                    >
-                        {{ t('Aggregator') }}
-                    </span>
-                    <span class="pill" :class="connectionStatusClass(connection.status)">
-                        {{ connectionStatusLabel(connection.status) }}
-                    </span>
-                    <span v-if="connection.needs_reconnect" class="pill pill-expiring">
-                        {{ t('Needs reconnect') }}
-                    </span>
-                    <span class="ml-auto text-xs text-muted-foreground" :data-test="`connection-token-${connection.id}`">
-                        {{ connectionExpiryNote(connection) }}
-                    </span>
-                </div>
-
-                <p
-                    v-if="isAggregator(connection)"
-                    class="mt-2 text-[11px] leading-relaxed text-muted-foreground"
-                    :data-test="`aggregator-note-${connection.id}`"
+            <template v-for="card in cards" :key="card.key">
+                <section
+                    v-if="card.kind === 'connection'"
+                    class="surface-card p-4"
+                    :data-test="`connection-${card.connection.id}`"
                 >
-                    {{
-                        t('The accounts are managed in {aggregator}.', {
-                            aggregator: aggregatorLabel(connection.provider),
-                        })
-                    }}
-                </p>
-
-                <p v-if="connection.scopes.length > 0" class="mt-2 text-[11px] text-muted-foreground">
-                    {{ t('Scopes') }}: {{ connection.scopes.join(', ') }}
-                </p>
-
-                <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <div
-                        v-for="account in connection.accounts"
-                        :key="account.id"
-                        class="rounded-lg border border-border p-3"
-                        :data-test="`connection-account-${account.id}`"
-                    >
-                        <div class="flex items-center gap-2">
-                            <span
-                                class="platform-chip"
-                                :data-network="account.platform"
-                                :style="{ '--network-color': brandColorVar(account.platform) }"
-                            >
-                                {{ accountLabel(account) }}
-                            </span>
-                            <span class="min-w-0 flex-1 truncate text-sm font-medium">
-                                {{ account.display_name }}
-                            </span>
-                        </div>
-                        <div class="mt-1 truncate text-xs text-muted-foreground">
-                            {{ account.username }} · {{ account.kind }}
-                        </div>
-                        <p
-                            v-if="accountRule(account)"
-                            class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground"
-                            :data-test="`account-rule-${account.id}`"
-                        >
-                            {{ accountRule(account)!.media_note }}
-                        </p>
-                        <div v-if="account.followers !== null" class="mt-2 text-xs text-muted-foreground">
-                            {{ t('Audience') }}:
-                            <span class="font-medium tabular-nums text-foreground">
-                                {{ account.followers.toLocaleString() }}
-                            </span>
-                        </div>
-                        <span
-                            v-if="account.status === 'disconnected'"
-                            class="pill pill-partial mt-2"
-                            :data-test="`account-disconnected-${account.id}`"
-                        >
-                            {{ t('Disconnected') }}
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="provider-chip" :data-provider="card.connection.provider">
+                            {{ connectionLabel(card.connection) }}
                         </span>
-                        <p
-                            v-if="account.report_note"
-                            class="mt-2 rounded border border-border px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground"
-                            :data-test="`account-report-note-${account.id}`"
+                        <span
+                            v-if="isAggregator(card.connection)"
+                            class="pill pill-neutral"
+                            data-test="aggregator-chip"
                         >
-                            {{ account.report_note }}
+                            {{ t('Aggregator') }}
+                        </span>
+                        <span class="pill" :class="connectionStatusClass(card.connection.status)">
+                            {{ connectionStatusLabel(card.connection.status) }}
+                        </span>
+                        <span v-if="card.connection.needs_reconnect" class="pill pill-expiring">
+                            {{ t('Needs reconnect') }}
+                        </span>
+                        <span class="ml-auto text-xs text-muted-foreground" :data-test="`connection-token-${card.connection.id}`">
+                            {{ connectionExpiryNote(card.connection) }}
+                        </span>
+                    </div>
+
+                    <p
+                        v-if="isAggregator(card.connection)"
+                        class="mt-2 text-[11px] leading-relaxed text-muted-foreground"
+                        :data-test="`aggregator-note-${card.connection.id}`"
+                    >
+                        {{
+                            t('The accounts are managed in {aggregator}.', {
+                                aggregator: aggregatorLabel(card.connection.provider),
+                            })
+                        }}
+                    </p>
+
+                    <p v-if="card.connection.scopes.length > 0" class="mt-2 text-[11px] text-muted-foreground">
+                        {{ t('Scopes') }}: {{ card.connection.scopes.join(', ') }}
+                    </p>
+
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <div
+                            v-for="account in card.connection.accounts"
+                            :key="account.id"
+                            class="rounded-lg border border-border p-3"
+                            :data-test="`connection-account-${account.id}`"
+                        >
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="platform-chip"
+                                    :data-network="account.platform"
+                                    :style="{ '--network-color': brandColorVar(account.platform) }"
+                                >
+                                    {{ accountLabel(account) }}
+                                </span>
+                                <span class="min-w-0 flex-1 truncate text-sm font-medium">
+                                    {{ account.display_name }}
+                                </span>
+                            </div>
+                            <div class="mt-1 truncate text-xs text-muted-foreground">
+                                {{ account.username }} · {{ account.kind }}
+                            </div>
+                            <p
+                                v-if="isAggregator(card.connection) && accountRule(account)"
+                                class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground"
+                                :data-test="`account-rule-${account.id}`"
+                            >
+                                {{ accountRule(account)!.media_note }}
+                            </p>
+                            <div v-if="account.followers !== null" class="mt-2 text-xs text-muted-foreground">
+                                {{ t('Audience') }}:
+                                <span class="font-medium tabular-nums text-foreground">
+                                    {{ account.followers.toLocaleString() }}
+                                </span>
+                            </div>
+                            <span
+                                v-if="account.status === 'disconnected'"
+                                class="pill pill-partial mt-2"
+                                :data-test="`account-disconnected-${account.id}`"
+                            >
+                                {{ t('Disconnected') }}
+                            </span>
+                            <p
+                                v-if="account.report_note"
+                                class="mt-2 rounded border border-border px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground"
+                                :data-test="`account-report-note-${account.id}`"
+                            >
+                                {{ account.report_note }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
+                        <!-- An aggregator has no token to renew and no login to
+                             close: the key is replaced by pasting a new one, and
+                             the accounts stay where they are. So it offers the
+                             two things that do something. -->
+                        <button
+                            v-if="isAggregator(card.connection)"
+                            type="button"
+                            class="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
+                            :data-test="`aggregator-sync-${card.connection.id}`"
+                            @click="emit('syncAggregator', card.connection.provider)"
+                        >
+                            <RefreshCw class="h-3 w-3" />
+                            {{ t('Sync now') }}
+                        </button>
+                        <button
+                            v-if="isAggregator(card.connection)"
+                            type="button"
+                            class="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium text-destructive transition-colors hover:bg-muted"
+                            :data-test="`aggregator-forget-${card.connection.id}`"
+                            @click="emit('forgetAggregator', card.connection.provider)"
+                        >
+                            <Trash class="h-3 w-3" />
+                            {{ t('Forget this key') }}
+                        </button>
+
+                        <!-- A connection with no expiry has nothing to renew:
+                             the backend hands the token back unchanged. A button
+                             that cannot do anything reads as a broken one. The
+                             rule is the expiry the platform sent — null when it
+                             sent none — and not the provider. -->
+                        <button
+                            v-if="!isAggregator(card.connection) && card.connection.expires_at !== null"
+                            type="button"
+                            class="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
+                            :data-test="`connection-refresh-${card.connection.id}`"
+                            @click="emit('refresh', card.connection)"
+                        >
+                            <RefreshCw class="h-3 w-3" />
+                            {{ t('Refresh token') }}
+                        </button>
+                        <button
+                            v-if="!isAggregator(card.connection)"
+                            type="button"
+                            class="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium text-destructive transition-colors hover:bg-muted"
+                            :data-test="`connection-disconnect-${card.connection.id}`"
+                            @click="emit('disconnect', card.connection)"
+                        >
+                            <Trash class="h-3 w-3" />
+                            {{ t('Disconnect') }}
+                        </button>
+                        <span v-if="needsAttention(card.connection)" class="text-[11px] text-amber-600 dark:text-amber-400">
+                            {{ t('This connection will not publish until it is renewed.') }}
+                        </span>
+                    </div>
+                </section>
+
+                <section
+                    v-else
+                    class="surface-card p-4"
+                    :data-test="`provider-${card.provider}`"
+                >
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="provider-chip" :data-provider="card.provider">
+                            {{ providerLabel(card.provider) }}
+                        </span>
+                        <div class="flex items-center gap-2">
+                            <button
+                                type="button"
+                                class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
+                                :data-test="`setup-guide-${card.provider}`"
+                                @click="emit('guide', card.provider)"
+                            >
+                                <BookOpen class="h-3.5 w-3.5" />
+                                {{ t('Setup guide') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
+                                :data-test="`connect-${card.provider}`"
+                                @click="emit('connect', card.provider)"
+                            >
+                                <Plus class="h-3.5 w-3.5" />
+                                {{ t('Connect {provider}', { provider: providerLabel(card.provider) }) }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- The wording is the backend's: the plugin knows what a
+                         provider needs and what it is called, and it emits the
+                         wording for the host to translate. A copy here would be a
+                         second wording to keep in step. -->
+                    <div
+                        v-if="setupNotice(card.provider) !== null"
+                        class="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
+                        :data-test="`setup-${card.provider}`"
+                    >
+                        <p class="text-xs font-medium" :data-test="`setup-title-${card.provider}`">
+                            {{ setupNotice(card.provider)!.title }}
+                        </p>
+                        <p class="mt-1 text-[11px] leading-relaxed text-muted-foreground" :data-test="`setup-body-${card.provider}`">
+                            {{ setupNotice(card.provider)!.body }}
                         </p>
                     </div>
-                </div>
-
-                <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
-                    <!-- An aggregator has no token to renew and no login to
-                         close: the key is replaced by pasting a new one, and
-                         the accounts stay where they are. So it offers the
-                         two things that do something. -->
-                    <button
-                        v-if="isAggregator(connection)"
-                        type="button"
-                        class="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
-                        :data-test="`aggregator-sync-${connection.id}`"
-                        @click="emit('syncAggregator', connection.provider)"
-                    >
-                        <RefreshCw class="h-3 w-3" />
-                        {{ t('Sync now') }}
-                    </button>
-                    <button
-                        v-if="isAggregator(connection)"
-                        type="button"
-                        class="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium text-destructive transition-colors hover:bg-muted"
-                        :data-test="`aggregator-forget-${connection.id}`"
-                        @click="emit('forgetAggregator', connection.provider)"
-                    >
-                        <Trash class="h-3 w-3" />
-                        {{ t('Forget this key') }}
-                    </button>
-
-                    <!-- A connection with no expiry has nothing to renew:
-                         the backend hands the token back unchanged. A button
-                         that cannot do anything reads as a broken one. The
-                         rule is the expiry the platform sent — null when it
-                         sent none — and not the provider. -->
-                    <button
-                        v-if="!isAggregator(connection) && connection.expires_at !== null"
-                        type="button"
-                        class="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
-                        :data-test="`connection-refresh-${connection.id}`"
-                        @click="emit('refresh', connection)"
-                    >
-                        <RefreshCw class="h-3 w-3" />
-                        {{ t('Refresh token') }}
-                    </button>
-                    <button
-                        v-if="!isAggregator(connection)"
-                        type="button"
-                        class="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium text-destructive transition-colors hover:bg-muted"
-                        :data-test="`connection-disconnect-${connection.id}`"
-                        @click="emit('disconnect', connection)"
-                    >
-                        <Trash class="h-3 w-3" />
-                        {{ t('Disconnect') }}
-                    </button>
-                    <span v-if="needsAttention(connection)" class="text-[11px] text-amber-600 dark:text-amber-400">
-                        {{ t('This connection will not publish until it is renewed.') }}
-                    </span>
-                </div>
-            </section>
-
-            <section
-                v-for="provider in openProviders"
-                :key="provider"
-                class="surface-card p-4"
-                :data-test="`provider-${provider}`"
-            >
-                <div class="flex items-center justify-between gap-3">
-                    <span class="provider-chip" :data-provider="provider">
-                        {{ providerLabel(provider) }}
-                    </span>
-                    <div class="flex items-center gap-2">
-                        <button
-                            type="button"
-                            class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
-                            :data-test="`setup-guide-${provider}`"
-                            @click="emit('guide', provider)"
-                        >
-                            <BookOpen class="h-3.5 w-3.5" />
-                            {{ t('Setup guide') }}
-                        </button>
-                        <button
-                            type="button"
-                            class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium transition-colors hover:bg-muted"
-                            :data-test="`connect-${provider}`"
-                            @click="emit('connect', provider)"
-                        >
-                            <Plus class="h-3.5 w-3.5" />
-                            {{ t('Connect {provider}', { provider: providerLabel(provider) }) }}
-                        </button>
-                    </div>
-                </div>
-
-                <!-- The wording is the backend's: the plugin knows what a
-                     provider needs and what it is called, and it emits the
-                     wording for the host to translate. A copy here would be a
-                     second wording to keep in step. -->
-                <div
-                    v-if="setupNotice(provider) !== null"
-                    class="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2"
-                    :data-test="`setup-${provider}`"
-                >
-                    <p class="text-xs font-medium" :data-test="`setup-title-${provider}`">
-                        {{ setupNotice(provider)!.title }}
-                    </p>
-                    <p class="mt-1 text-[11px] leading-relaxed text-muted-foreground" :data-test="`setup-body-${provider}`">
-                        {{ setupNotice(provider)!.body }}
-                    </p>
-                </div>
-            </section>
+                </section>
+            </template>
 
             <!-- The aggregator is one quiet line, below the providers the
                  operator connects themselves. It is not a peer of them, and

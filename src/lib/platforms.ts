@@ -14,6 +14,7 @@
  * the channel's identity.
  */
 import { t } from '../i18n'
+import { NATIVE_NETWORK_NAMES } from './providers'
 import type { AggregatorConfig, Channel, PlatformRules } from '../types'
 
 /** The rules, keyed by the channel's key. */
@@ -129,11 +130,13 @@ function networkLabels(rules: ChannelRules): Record<string, string> {
  * The label of a network, from the rules.
  *
  * The name is the rules' — a copy here would be a name nobody updates. A
- * network with no rule falls back to its own name, which is the best a
- * screen can say about a network the plugin does not offer.
+ * network with no rule falls back to the brand the operator knows it by, and
+ * a network that is neither in the rules nor one of the plugin's own falls
+ * back to its own name, which is the best a screen can say about a network
+ * the plugin does not offer.
  */
 export function networkLabel(network: string, rules: ChannelRules): string {
-    return networkLabels(rules)[network] ?? network
+    return networkLabels(rules)[network] ?? NATIVE_NETWORK_NAMES[network] ?? network
 }
 
 /**

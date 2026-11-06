@@ -258,6 +258,29 @@ describe('ConnectionsGrid', () => {
         expect(wrapper.find('[data-test="connection-refresh-2"]').exists()).toBe(true)
         expect(wrapper.find('[data-test="connection-disconnect-2"]').exists()).toBe(true)
     })
+
+    it('names the network on an account card before the config has arrived', () => {
+        // The rules are the backend's and they arrive with the config. Until
+        // then the chip must not read the machine's name.
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: CONNECTIONS_PAYLOAD,
+            config: null,
+        })
+
+        const chip = wrapper.find('[data-test="connection-account-12"] [data-network="instagram"]')
+        expect(chip.text()).toBe('Instagram')
+    })
+
+    it('shows no limit on a native account card', () => {
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: CONNECTIONS_PAYLOAD,
+            config: CONFIG_PAYLOAD,
+        })
+
+        // The native cards never carried a limit: the plugin's own limits
+        // are the network's own, and they belong on the attachment.
+        expect(wrapper.find('[data-test="account-rule-12"]').exists()).toBe(false)
+    })
 })
 
 describe('ConnectionsGrid — the aggregator', () => {
@@ -289,6 +312,27 @@ describe('ConnectionsGrid — the aggregator', () => {
 
         expect(lastProvider).toBeGreaterThan(-1)
         expect(aggregator).toBeGreaterThan(lastProvider)
+    })
+
+    it('puts the aggregator’s card after the native provider cards', () => {
+        // An aggregator is not a peer of the providers the operator connects
+        // themselves: its card comes after theirs, not before them.
+        const wrapper = mountComponent(ConnectionsGrid, {
+            connections: [
+                makeConnection({ id: 1, provider: 'meta' }),
+                makeConnection({ id: 9, provider: 'zernio', accounts: [] }),
+            ],
+            config: CONFIG_PAYLOAD,
+        })
+
+        const order = wrapper
+            .findAll('[data-test]')
+            .map((node) => node.attributes('data-test'))
+
+        // The native connections keep their place, the provider cards follow
+        // them, and the aggregator's card is last of the three.
+        expect(order.indexOf('connection-1')).toBeLessThan(order.indexOf('provider-linkedin'))
+        expect(order.indexOf('provider-linkedin')).toBeLessThan(order.indexOf('connection-9'))
     })
 
     it('opens a panel that says what the thing is and takes the key', async () => {
