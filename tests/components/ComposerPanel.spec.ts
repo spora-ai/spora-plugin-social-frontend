@@ -101,6 +101,32 @@ describe('ComposerPanel — the writing surface', () => {
         expect(wrapper.find('[data-test="preview-direct:linkedin"]').text()).toContain('Over the limit')
     })
 
+    it('shows the counting note where a number it cannot compute would be', async () => {
+        // X counts a URL as 23 characters and an emoji as 2, so the plugin's
+        // own count is wrong for it — and a wrong number is worse than none.
+        const { wrapper, social } = mountComposer()
+        social.connections = [
+            makeConnection({
+                provider: 'zernio',
+                accounts: [makeAccount({ id: 40, platform: 'twitter', via: 'zernio' })],
+            }),
+        ]
+        await wrapper.vm.$nextTick()
+
+        await wrapper.find('[data-test="target-40"]').setValue(true)
+        await wrapper.find('#cmp-body').setValue('a'.repeat(10))
+        await flushPromises()
+
+        const preview = wrapper.find('[data-test="preview-zernio:twitter"]')
+        expect(preview.find('[data-test="counting-note"]').text()).toContain(
+            'X counts a URL as 23 characters',
+        )
+        // No number, and no verdict on it: the network refuses the post and
+        // its own message lands on the target.
+        expect(preview.find('.char-count').exists()).toBe(false)
+        expect(preview.text()).not.toContain('Over the limit')
+    })
+
     it('counts the accounts the operator picked', async () => {
         const { wrapper } = mountComposer()
 

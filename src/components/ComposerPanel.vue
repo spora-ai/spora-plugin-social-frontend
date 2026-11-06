@@ -218,6 +218,11 @@ const previews = computed(() =>
             label: channelLabel(channel, social.rules),
             rule,
             count,
+            /**
+             * The network counts characters its own way and the plugin cannot
+             * compute that count — so the note takes the number's place.
+             */
+            countingNote: rule?.counting_note ?? null,
             ownText: hasOwnText(channel.key),
             mediaRequired: rule?.media_required === true,
             mediaCount: rule?.media_count ?? null,
@@ -973,7 +978,14 @@ async function submit(): Promise<void> {
                                         {{ hashtagText }}
                                     </span>
                                     <span
-                                        v-if="preview.count !== null"
+                                        v-if="preview.countingNote !== null"
+                                        class="max-w-[12rem] text-[11px] leading-snug text-muted-foreground"
+                                        data-test="counting-note"
+                                    >
+                                        {{ preview.countingNote }}
+                                    </span>
+                                    <span
+                                        v-else-if="preview.count !== null"
                                         class="char-count text-[11px] tabular-nums text-muted-foreground"
                                         :data-over="preview.count.over"
                                         :data-near="preview.count.near"
@@ -1008,7 +1020,10 @@ async function submit(): Promise<void> {
                             </p>
 
                             <div class="mt-2 flex flex-wrap gap-1">
-                                <span v-if="preview.count !== null && preview.count.over" class="pill pill-failed">
+                                <span
+                                    v-if="preview.countingNote === null && preview.count !== null && preview.count.over"
+                                    class="pill pill-failed"
+                                >
                                     <TriangleAlert class="h-3 w-3" />
                                     {{ t('Over the limit') }}
                                 </span>
