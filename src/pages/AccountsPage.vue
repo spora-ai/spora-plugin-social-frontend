@@ -108,7 +108,9 @@ async function disconnect(connection: SocialConnection): Promise<void> {
  * operator looking for one.
  */
 async function openGuide(provider: Provider): Promise<void> {
-    await social.loadConfig(principalId.value ?? 0)
+    if (principalId.value === null) return
+
+    await social.loadConfig(principalId.value)
 
     guideProvider.value = provider
 }
