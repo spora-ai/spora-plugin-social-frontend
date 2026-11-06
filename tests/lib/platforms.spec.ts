@@ -157,8 +157,15 @@ describe('lib/platforms — the channel', () => {
 
     it('has no label for a channel the plugin does not offer', () => {
         // A network with no rules row is one the plugin cannot publish to:
-        // no limits, no name, no colour.
-        expect(channelLabel(channelFromKey('zernio:myspace'), rules)).toBe('myspace')
+        // no limits, no name, no colour. The fallback to another route's
+        // label would name it after a channel the plugin does offer.
+        expect(channelLabel(channelFromKey('zernio:myspace'), rules)).toBe('')
+    })
+
+    it('names a channel while the rules have not arrived', () => {
+        // The rules are unknown, not refused: until the config has been read
+        // there is no row for any channel, and an empty chip says nothing.
+        expect(channelLabel(channelFromKey('direct:linkedin'), {})).toBe('linkedin')
     })
 
     it('names a network from any of its channels', () => {

@@ -96,11 +96,17 @@ export function uniqueChannels(channels: Channel[]): Channel[] {
  *
  * A channel with no rule has no label: the plugin does not offer it, so
  * there is nothing to name.
+ *
+ * **Rules that have not arrived are not a rule that says no.** Until the
+ * config has been read there is no row for any channel, and an empty chip
+ * says nothing at all — so the network's own name stands in until the rules
+ * are there.
  */
 export function channelLabel(channel: Channel, rules: ChannelRules): string {
     const rule = rules[channel.key]
     if (rule !== undefined) return rule.label
-    return networkLabel(channel.network, rules)
+    if (Object.keys(rules).length === 0) return networkLabel(channel.network, rules)
+    return ''
 }
 
 /**
