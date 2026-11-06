@@ -20,6 +20,18 @@ import { CONFIG_PAYLOAD } from '../recorded'
 
 const rules = CONFIG_PAYLOAD.rules
 
+/**
+ * The lightness a hashed chart colour carries.
+ *
+ * The hashed colours are written as `hsl(<hue> <saturation>% <lightness>%)`,
+ * so the lightness is the third number.
+ */
+function lightnessOf(color: string): number {
+    const match = /hsl\(\d+ \d+% (\d+)%\)/.exec(color)
+    if (match === null) throw new Error(`no lightness in ${color}`)
+    return Number(match[1])
+}
+
 describe('lib/platforms', () => {
     it('carries no copy of the limits', () => {
         // The backend enforces these, so a copy here is a copy that warns
@@ -179,17 +191,17 @@ describe('lib/platforms — the colours', () => {
     it('keeps the chart series away from the brand hues', () => {
         // LinkedIn's and Facebook's blues are indistinguishable in a stacked
         // bar, so the series carry their own tokens.
-        expect(chartColorVar('linkedin')).toContain('--chart-linkedin')
-        expect(chartColorVar('facebook')).toContain('--chart-facebook')
-        expect(chartColorVar('instagram')).toContain('--chart-instagram')
+        expect(chartColorVar(channelFromKey('direct:linkedin'))).toContain('--chart-linkedin')
+        expect(chartColorVar(channelFromKey('direct:facebook'))).toContain('--chart-facebook')
+        expect(chartColorVar(channelFromKey('direct:instagram'))).toContain('--chart-instagram')
         expect(brandColorVar('linkedin')).toContain('--platform-linkedin')
-        expect(chartColorVar('linkedin')).not.toBe(brandColorVar('linkedin'))
+        expect(chartColorVar(channelFromKey('direct:linkedin'))).not.toBe(brandColorVar('linkedin'))
     })
 
     it('gives a network with no variable the hashed colour instead', () => {
         // Bluesky has no hand-picked hue, so it gets one hashed from its
         // name — and the colour is not the brand hue of anything.
-        expect(chartColorVar('bluesky')).not.toContain('--chart-')
+        expect(chartColorVar(channelFromKey('direct:bluesky'))).not.toContain('--chart-')
         expect(brandColorVar('bluesky')).not.toContain('--platform-')
     })
 
@@ -197,7 +209,9 @@ describe('lib/platforms — the colours', () => {
         // The hue is hashed from the name, so a network looks the same in
         // the chip, in the chart and in the legend.
         expect(brandColorVar('bluesky')).toBe(brandColorVar('bluesky'))
-        expect(chartColorVar('tiktok')).toBe(chartColorVar('tiktok'))
+        expect(chartColorVar(channelFromKey('direct:tiktok'))).toBe(
+            chartColorVar(channelFromKey('direct:tiktok')),
+        )
     })
 
     it('hashes the hue from the network’s name', () => {
@@ -206,11 +220,41 @@ describe('lib/platforms — the colours', () => {
         expect(brandColorVar('bluesky')).toContain('hsl(198 64% 38%)')
         expect(brandColorVar('tiktok')).toContain('hsl(83 76% 46%)')
         // The chart and the chip share the hue; only the mix differs.
-        expect(chartColorVar('bluesky')).toContain('hsl(198 64% 38%)')
+        expect(chartColorVar(channelFromKey('direct:bluesky'))).toContain('hsl(198 64% 38%)')
     })
 
     it('gives two different networks different colours', () => {
         expect(brandColorVar('bluesky')).not.toBe(brandColorVar('tiktok'))
+    })
+
+    it('keeps the hand-picked hue for the plugin’s own route', () => {
+        const direct = chartColorVar(channelFromKey('direct:linkedin'))
+
+        // The stylesheet holds the hue, and the direct route is that hue.
+        expect(direct).toContain('--chart-linkedin')
+        expect(direct).not.toContain('calc(')
+    })
+
+    it('gives an aggregator route the network’s hue and a lighter shade of it', () => {
+        const direct = chartColorVar(channelFromKey('direct:bluesky'))
+        const aggregated = chartColorVar(channelFromKey('zernio:bluesky'))
+
+        // The hue and the saturation are the network's on both routes — it
+        // is the same network.
+        expect(direct).toContain('hsl(198 64%')
+        expect(aggregated).toContain('hsl(198 64%')
+        // Eight points lighter, so the two segments of one bar can be told
+        // apart.
+        expect(lightnessOf(aggregated)).toBe(lightnessOf(direct) + 8)
+    })
+
+    it('shifts the hand-picked hue’s lightness on an aggregator route', () => {
+        const aggregated = chartColorVar(channelFromKey('zernio:linkedin'))
+
+        // The variable's own hue, with the variable's own lightness shifted —
+        // so the hand-picked hue survives the theme's two values.
+        expect(aggregated).toContain('--chart-linkedin')
+        expect(aggregated).toContain('calc(l + 8)')
     })
 
     it('names the networks with a hand-picked hue, and the stylesheet agrees', () => {

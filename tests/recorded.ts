@@ -370,6 +370,10 @@ export const MEDIA_PAYLOAD = [
  * `GET /api/v1/plugins/social/calendar` — `SocialScheduleController::calendar()`.
  *
  * The posts of a month are keyed by `post_id`, and carry both dates.
+ *
+ * The **channels** go along: one entry per target, each naming the channel's
+ * key, the network and the route. Two targets on one channel arrive as two
+ * entries — a target is an account, and a channel is a route to a network.
  */
 export const CALENDAR_PAYLOAD = {
     posts: [
@@ -390,6 +394,10 @@ export const CALENDAR_PAYLOAD = {
  * A counter nobody reported stays **null**, in the totals, in the network
  * rows and in the top posts. The series omits a network's key on a day that
  * network reported no reach.
+ *
+ * A row is a **channel**: the network and the route to it. The series is
+ * keyed by the channel's key, so the same network on two routes is two
+ * segments.
  */
 export const SUMMARY_PAYLOAD = {
     totals: {
@@ -404,6 +412,8 @@ export const SUMMARY_PAYLOAD = {
     by_network: [
         {
             platform: 'linkedin',
+            channel: 'direct:linkedin',
+            via: 'direct',
             reach: 4820,
             impressions: 9310,
             likes: 20,
@@ -415,6 +425,8 @@ export const SUMMARY_PAYLOAD = {
         },
         {
             platform: 'instagram',
+            channel: 'direct:instagram',
+            via: 'direct',
             // A network that reported no reach: the counters nobody reported
             // are null, not zero.
             reach: null,
@@ -428,14 +440,15 @@ export const SUMMARY_PAYLOAD = {
         },
     ],
     series: [
-        { date: '2026-10-01', linkedin: 120, facebook: 80 },
-        { date: '2026-10-02', linkedin: 240, instagram: 90 },
+        { date: '2026-10-01', 'direct:linkedin': 120, 'direct:facebook': 80 },
+        { date: '2026-10-02', 'direct:linkedin': 240, 'direct:instagram': 90 },
     ],
     top_posts: [
         {
             post_id: 88,
             title: 'Q4 release',
             platform: 'linkedin',
+            via: 'direct',
             reach: 4820,
             impressions: 9310,
             likes: 12,
@@ -445,6 +458,7 @@ export const SUMMARY_PAYLOAD = {
             post_id: 89,
             title: 'Studio launch',
             platform: 'instagram',
+            via: 'direct',
             reach: null,
             impressions: null,
             likes: null,
@@ -452,4 +466,76 @@ export const SUMMARY_PAYLOAD = {
         },
     ],
     notes: ['LinkedIn member posts report reactions only — the reach column is empty by design.'],
+} satisfies AnalyticsSummary
+
+/**
+ * The same endpoint for a network reached through **two routes**.
+ *
+ * A LinkedIn member profile published directly and a LinkedIn organisation
+ * page published through the aggregator: one network, two accounts, two
+ * sets of numbers. The rows are per channel, so the network appears twice —
+ * and the series carries a segment for each.
+ */
+export const TWO_ROUTE_SUMMARY_PAYLOAD = {
+    totals: {
+        reach: 140,
+        impressions: 280,
+        likes: 10,
+        comments: 0,
+        shares: 0,
+        saves: 0,
+        clicks: 0,
+    },
+    by_network: [
+        {
+            platform: 'linkedin',
+            channel: 'direct:linkedin',
+            via: 'direct',
+            reach: 100,
+            impressions: 200,
+            likes: 5,
+            comments: 0,
+            shares: 0,
+            saves: 0,
+            clicks: 0,
+            posts: 1,
+        },
+        {
+            platform: 'linkedin',
+            channel: 'zernio:linkedin',
+            via: 'zernio',
+            reach: 40,
+            impressions: 80,
+            likes: 5,
+            comments: 0,
+            shares: 0,
+            saves: 0,
+            clicks: 0,
+            posts: 1,
+        },
+    ],
+    series: [{ date: '2026-10-01', 'direct:linkedin': 100, 'zernio:linkedin': 40 }],
+    top_posts: [
+        {
+            post_id: 88,
+            title: 'Q4 release',
+            platform: 'linkedin',
+            via: 'direct',
+            reach: 100,
+            impressions: 200,
+            likes: 5,
+            published_at: '2026-11-02T09:00:04+00:00',
+        },
+        {
+            post_id: 88,
+            title: 'Q4 release',
+            platform: 'linkedin',
+            via: 'zernio',
+            reach: 40,
+            impressions: 80,
+            likes: 5,
+            published_at: '2026-11-02T09:00:04+00:00',
+        },
+    ],
+    notes: [],
 } satisfies AnalyticsSummary

@@ -1,14 +1,18 @@
 <script setup lang="ts">
 /**
- * The analytics view: the counters, the reach-per-day chart, the per-network
+ * The analytics view: the counters, the reach-per-day chart, the per-channel
  * table and the top posts.
  *
- * Two decisions in here:
+ * Three decisions in here:
  *
- *  - **The networks are kept apart.** Each counts reach its own way, so the
- *    rows stay separate and the summed figure is labelled a rough one — a
- *    combined "total reach" across three networks is not a fact. The caveat
- *    is written under the table, where the numbers are.
+ *  - **The channels are kept apart.** Each network counts reach its own
+ *    way, so the rows stay separate and the summed figure is labelled a
+ *    rough one — a combined "total reach" across three networks is not a
+ *    fact. The caveat is written under the table, where the numbers are.
+ *  - **A row is a channel, not a network.** The same network reached
+ *    through two routes is two accounts with two sets of numbers, so it is
+ *    two rows — and the route is named on every row, because a row that
+ *    says only "linkedin" says nothing about which of the two it is.
  *  - **The chart series are not the platform brand hues.** LinkedIn's and
  *    Facebook's blues are too close to tell apart in a stacked bar, so the
  *    series carry their own colours — and the legend swatches use those too,
@@ -17,10 +21,17 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { brandColorVar, chartColorVar, networkLabel } from '../lib/platforms'
+import {
+    brandColorVar,
+    chartColorVar,
+    channelFromKey,
+    channelOf,
+    networkLabel,
+    routeLabel,
+} from '../lib/platforms'
 import { formatCounter } from '../lib/metrics'
 import { NO_VALUE } from '../lib/format'
-import type { AnalyticsPoint, AnalyticsSummary, NetworkTotals, Network, SocialConfig } from '../types'
+import type { AnalyticsPoint, AnalyticsSummary, Channel, NetworkTotals, SocialConfig } from '../types'
 
 const props = defineProps<{
     summary: AnalyticsSummary | null
@@ -30,59 +41,74 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-const networks = computed<NetworkTotals[]>(() => props.summary?.by_network ?? [])
+/** The rows — one per channel, so two routes to one network are two rows. */
+const rows = computed<NetworkTotals[]>(() => props.summary?.by_network ?? [])
 
 const series = computed(() => props.summary?.series ?? [])
 
 const topPosts = computed(() => props.summary?.top_posts ?? [])
 
+const rules = computed(() => props.config?.rules ?? {})
+
+const aggregators = computed(() => props.config?.aggregators ?? {})
+
 /**
- * The networks the chart stacks.
+ * The channel a row is about.
  *
- * The series is keyed by the network's name, and the days carry whichever
- * networks reported that day — so the stack follows the data rather than a
+ * The row's own fields, so the route is the one the backend sent and not
+ * one read back out of the key.
+ */
+function channelOfRow(row: NetworkTotals): Channel {
+    return channelOf(row.via, row.platform)
+}
+
+/**
+ * The channels the chart stacks.
+ *
+ * The series is keyed by the channel's key, and the days carry whichever
+ * channels reported that day — so the stack follows the data rather than a
  * fixed list of networks, which the aggregator's fifteen would outgrow.
  */
-const seriesNetworks = computed<Network[]>(() => {
-    const names = new Set<Network>()
+const seriesChannels = computed<string[]>(() => {
+    const keys = new Set<string>()
 
     for (const day of series.value) {
         for (const key of Object.keys(day)) {
-            if (key !== 'date') names.add(key)
+            if (key !== 'date') keys.add(key)
         }
     }
 
-    return [...names]
+    return [...keys]
 })
 
 /**
- * The reach a network reported that day.
+ * The reach a channel reported that day.
  *
- * An absent key means that network reported nothing — it is not a zero, but
+ * An absent key means that channel reported nothing — it is not a zero, but
  * for the height of a bar the two are the same amount of nothing.
  */
-function dayReach(day: AnalyticsPoint, network: Network): number {
-    const reach = day[network]
+function dayReach(day: AnalyticsPoint, channel: string): number {
+    const reach = day[channel]
     return typeof reach === 'number' ? reach : 0
 }
 
-/** The day's reach across the networks that reported one. */
+/** The day's reach across the channels that reported one. */
 function dayTotal(day: AnalyticsPoint): number {
-    return seriesNetworks.value.reduce((sum, network) => sum + dayReach(day, network), 0)
+    return seriesChannels.value.reduce((sum, channel) => sum + dayReach(day, channel), 0)
 }
 
 /** The tallest day in the series — the chart's scale. */
 const peak = computed(() => series.value.reduce((max, day) => Math.max(max, dayTotal(day)), 0))
 
 /**
- * The reach summed over the networks that reported one.
+ * The reach summed over the channels that reported one.
  *
- * Null when no network reported a reach: there is nothing to sum, and a zero
+ * Null when no channel reported a reach: there is nothing to sum, and a zero
  * would say the post reached nobody.
  */
 const summedReach = computed<number | null>(() => {
-    const reported = networks.value
-        .map((network) => network.reach)
+    const reported = rows.value
+        .map((row) => row.reach)
         .filter((reach): reach is number => reach !== null)
 
     return reported.length === 0
@@ -91,51 +117,49 @@ const summedReach = computed<number | null>(() => {
 })
 
 const summedEngagements = computed(() =>
-    networks.value.reduce(
-        (sum, network) =>
+    rows.value.reduce(
+        (sum, row) =>
             sum +
-            (network.likes ?? 0) +
-            (network.comments ?? 0) +
-            (network.shares ?? 0) +
-            (network.saves ?? 0),
+            (row.likes ?? 0) +
+            (row.comments ?? 0) +
+            (row.shares ?? 0) +
+            (row.saves ?? 0),
         0,
     ),
 )
 
-/** The network with the most reach, among the ones that reported any. */
-const bestNetwork = computed<NetworkTotals | null>(() => {
-    const reporting = networks.value.filter((network) => network.reach !== null)
+/** The channel with the most reach, among the ones that reported any. */
+const bestRow = computed<NetworkTotals | null>(() => {
+    const reporting = rows.value.filter((row) => row.reach !== null)
     if (reporting.length === 0) return null
-    return reporting.reduce((best, network) =>
-        (network.reach ?? 0) > (best.reach ?? 0) ? network : best,
+    return reporting.reduce((best, row) =>
+        (row.reach ?? 0) > (best.reach ?? 0) ? row : best,
     )
 })
 
-const publishedPosts = computed(
-    () => networks.value.reduce((sum, network) => sum + network.posts, 0),
-)
+const publishedPosts = computed(() => rows.value.reduce((sum, row) => sum + row.posts, 0))
 
 /**
  * The rate, or null when there is no rate to state.
  *
- * A network that reported no reach has no rate, and a reach of zero is 0/0 —
+ * A channel that reported no reach has no rate, and a reach of zero is 0/0 —
  * which is not a rate either.
  */
-function rate(network: NetworkTotals): number | null {
-    if (network.reach === null || network.reach === 0) return null
+function rate(row: NetworkTotals): number | null {
+    if (row.reach === null || row.reach === 0) return null
     return (
-        (network.likes ?? 0) +
-        (network.comments ?? 0) +
-        (network.shares ?? 0) +
-        (network.saves ?? 0)
-    ) / network.reach
+        (row.likes ?? 0) +
+        (row.comments ?? 0) +
+        (row.shares ?? 0) +
+        (row.saves ?? 0)
+    ) / row.reach
 }
 
-/** The share of a day's reach that one network holds — the stack's segments. */
-function share(day: AnalyticsPoint, network: Network): number {
+/** The share of a day's reach that one channel holds — the stack's segments. */
+function share(day: AnalyticsPoint, channel: string): number {
     const total = dayTotal(day)
     if (total <= 0) return 0
-    return (dayReach(day, network) / total) * 100
+    return (dayReach(day, channel) / total) * 100
 }
 
 function height(day: AnalyticsPoint): number {
@@ -177,10 +201,19 @@ function height(day: AnalyticsPoint): number {
                     <div class="mt-1 text-xl font-semibold tabular-nums">{{ publishedPosts }}</div>
                     <div class="mt-0.5 text-[11px] text-muted-foreground">{{ t('with numbers on at least one network') }}</div>
                 </div>
-                <div class="surface-card p-3.5" data-test="kpi-best-network">
-                    <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('Best network') }}</div>
-                    <div class="mt-1 text-xl font-semibold">
-                        {{ bestNetwork === null ? '—' : networkLabel(bestNetwork.platform, props.config?.rules ?? {}) }}
+                <div class="surface-card p-3.5" data-test="kpi-best-channel">
+                    <div class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('Best channel') }}</div>
+                    <div class="mt-1 flex items-baseline gap-2">
+                        <span class="text-xl font-semibold">
+                            {{ bestRow === null ? '—' : networkLabel(bestRow.platform, rules) }}
+                        </span>
+                        <span
+                            v-if="bestRow !== null"
+                            class="text-[11px] text-muted-foreground"
+                            data-test="kpi-best-route"
+                        >
+                            {{ routeLabel(bestRow.via, aggregators) }}
+                        </span>
                     </div>
                     <div class="mt-0.5 text-[11px] text-muted-foreground">{{ t('by reach') }}</div>
                 </div>
@@ -189,20 +222,21 @@ function height(day: AnalyticsPoint): number {
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h2 class="text-sm font-semibold">{{ t('Reach per day') }}</h2>
-                        <p class="text-xs text-muted-foreground">{{ t('Stacked by network, last 30 days.') }}</p>
+                        <p class="text-xs text-muted-foreground">{{ t('Stacked by channel, last 30 days.') }}</p>
                     </div>
                     <div class="flex items-center gap-2" data-test="chart-legend">
                         <span
-                            v-for="network in networks"
-                            :key="network.platform"
+                            v-for="row in rows"
+                            :key="row.channel"
                             class="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
-                            :data-test="`legend-${network.platform}`"
+                            :data-test="`legend-${row.channel}`"
                         >
                             <span
                                 class="h-2.5 w-2.5 rounded-sm"
-                                :style="{ background: chartColorVar(network.platform) }"
+                                :style="{ background: chartColorVar(channelOfRow(row)) }"
                             />
-                            {{ networkLabel(network.platform, props.config?.rules ?? {}) }}
+                            {{ networkLabel(row.platform, rules) }}
+                            <span class="opacity-70">{{ routeLabel(row.via, aggregators) }}</span>
                         </span>
                     </div>
                 </div>
@@ -217,13 +251,14 @@ function height(day: AnalyticsPoint): number {
                     >
                         <div class="flex flex-col justify-end" :style="{ height: `${height(day)}%` }">
                             <span
-                                v-for="network in seriesNetworks"
-                                :key="network"
+                                v-for="channel in seriesChannels"
+                                :key="channel"
                                 class="block w-full"
                                 :style="{
-                                    height: `${share(day, network)}%`,
-                                    background: chartColorVar(network),
+                                    height: `${share(day, channel)}%`,
+                                    background: chartColorVar(channelFromKey(channel)),
                                 }"
+                                :data-test="`chart-segment-${channel}`"
                             />
                         </div>
                     </div>
@@ -239,7 +274,7 @@ function height(day: AnalyticsPoint): number {
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b border-border bg-muted/40 text-left">
-                            <th class="px-3 py-2 font-medium text-muted-foreground">{{ t('Network') }}</th>
+                            <th class="px-3 py-2 font-medium text-muted-foreground">{{ t('Channel') }}</th>
                             <th class="px-3 py-2 text-right font-medium text-muted-foreground">{{ t('Reach') }}</th>
                             <th class="px-3 py-2 text-right font-medium text-muted-foreground">{{ t('Impressions') }}</th>
                             <th class="px-3 py-2 text-right font-medium text-muted-foreground">{{ t('Engagements') }}</th>
@@ -248,44 +283,52 @@ function height(day: AnalyticsPoint): number {
                     </thead>
                     <tbody>
                         <tr
-                            v-for="network in networks"
-                            :key="network.platform"
+                            v-for="row in rows"
+                            :key="row.channel"
                             class="border-b border-border last:border-b-0"
-                            :data-test="`network-row-${network.platform}`"
+                            :data-test="`network-row-${row.channel}`"
                         >
                             <td class="px-3 py-2.5">
-                                <span
-                                    class="platform-chip"
-                                    :data-network="network.platform"
-                                    :style="{ '--network-color': brandColorVar(network.platform) }"
-                                >
-                                    {{ networkLabel(network.platform, props.config?.rules ?? {}) }}
+                                <span class="inline-flex items-center gap-1">
+                                    <span
+                                        class="platform-chip"
+                                        :data-network="row.platform"
+                                        :style="{ '--network-color': brandColorVar(row.platform) }"
+                                    >
+                                        {{ networkLabel(row.platform, rules) }}
+                                    </span>
+                                    <span
+                                        class="text-[10px] text-muted-foreground"
+                                        :data-test="`network-route-${row.channel}`"
+                                    >
+                                        {{ routeLabel(row.via, aggregators) }}
+                                    </span>
                                 </span>
                             </td>
                             <td
                                 class="px-3 py-2.5 text-right tabular-nums"
-                                :data-test="`network-reach-${network.platform}`"
+                                :data-test="`network-reach-${row.channel}`"
                             >
-                                {{ formatCounter(network.reach) }}
+                                {{ formatCounter(row.reach) }}
                             </td>
                             <td
                                 class="px-3 py-2.5 text-right tabular-nums"
-                                :data-test="`network-impressions-${network.platform}`"
+                                :data-test="`network-impressions-${row.channel}`"
                             >
-                                {{ formatCounter(network.impressions) }}
+                                {{ formatCounter(row.impressions) }}
                             </td>
                             <td class="px-3 py-2.5 text-right tabular-nums">
-                                {{ ((network.likes ?? 0) + (network.comments ?? 0) + (network.shares ?? 0) + (network.saves ?? 0)).toLocaleString() }}
+                                {{ ((row.likes ?? 0) + (row.comments ?? 0) + (row.shares ?? 0) + (row.saves ?? 0)).toLocaleString() }}
                             </td>
                             <td class="px-3 py-2.5 text-right tabular-nums">
-                                {{ rate(network) === null ? NO_VALUE : `${(rate(network)! * 100).toFixed(1)}%` }}
+                                {{ rate(row) === null ? NO_VALUE : `${(rate(row)! * 100).toFixed(1)}%` }}
                             </td>
                         </tr>
                     </tbody>
                 </table>
 
                 <p class="border-t border-border px-3 py-2 text-[11px] text-muted-foreground" data-test="network-caveat">
-                    {{ t('The rows are kept apart, because each network counts reach its own way — LinkedIn’s share statistics only exist for organisation pages, and Instagram’s impressions are not Facebook’s impressions. The totals above sum them anyway, which makes them a rough figure rather than a comparable one.') }}
+                    {{ t('The rows are kept apart, because each network counts reach its own way — LinkedIn’s share statistics only exist for organisation pages, and Instagram’s impressions are not Facebook’s impressions. The same network on two routes is two rows, with two sets of numbers. The totals above sum them anyway, which makes them a rough figure rather than a comparable one.') }}
                 </p>
 
                 <ul v-if="summary.notes.length > 0" class="border-t border-border px-3 py-2 text-[11px] text-muted-foreground" data-test="analytics-notes">
@@ -307,13 +350,14 @@ function height(day: AnalyticsPoint): number {
                         <tbody>
                             <tr
                                 v-for="post in topPosts"
-                                :key="post.post_id"
+                                :key="`${post.post_id}:${post.via}:${post.platform}`"
                                 class="border-b border-border last:border-b-0 transition-colors hover:bg-muted/30"
                             >
                                 <td class="px-3 py-2.5">
                                     <div class="font-medium">{{ post.title }}</div>
                                     <div class="mt-0.5 text-[11px] text-muted-foreground">
-                                        {{ networkLabel(post.platform, props.config?.rules ?? {}) }}
+                                        {{ networkLabel(post.platform, rules) }}
+                                        <span class="opacity-70" :data-test="`top-post-route-${post.post_id}`">{{ routeLabel(post.via, aggregators) }}</span>
                                     </div>
                                 </td>
                                 <td

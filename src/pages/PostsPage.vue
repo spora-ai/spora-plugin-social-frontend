@@ -19,7 +19,7 @@ import PostImage from '../components/PostImage.vue'
 import { useSocialStore } from '../stores/social'
 import * as socialApi from '../api/social'
 import { analyticsPath, composePostPath, postsPath } from '../lib/paths'
-import { channelFromKey, channelLabel, networkLabel } from '../lib/platforms'
+import { channelFromKey, channelLabel, networkLabel, routeLabel } from '../lib/platforms'
 import { formatDateTime } from '../lib/format'
 import { formatCounter } from '../lib/metrics'
 import { awaitingAgent, sourceLabel } from '../lib/postSource'
@@ -341,6 +341,7 @@ watch(drawerPostId, () => {
                                         </div>
                                         <div class="text-[10px] text-muted-foreground">
                                             {{ networkLabel(target.platform, social.rules) }}
+                                            <span class="opacity-70" :data-test="`target-route-${target.id}`">{{ routeLabel(target.via, social.config?.aggregators ?? {}) }}</span>
                                         </div>
                                     </div>
                                     <span class="pill pill-neutral">{{ targetStatusLabel(target.status) }}</span>

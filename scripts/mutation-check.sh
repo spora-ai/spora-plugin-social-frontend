@@ -89,9 +89,40 @@ check "media fit badge" src/components/MediaStrip.vue \
 
 # 8. The chart series use the chart tokens, not the brand hues.
 check "chart series colours" src/components/AnalyticsView.vue \
-  'background: `hsl(${chartColorVar(platform)})`,' \
-  'background: `hsl(${brandColorVar(platform)})`,' \
+  'background: chartColorVar(channelFromKey(channel)),' \
+  'background: brandColorVar(channelFromKey(channel)),' \
   tests/components/AnalyticsView.spec.ts
+
+# 64. The analytics rows are keyed by the channel. Two rows with one key are
+# one row patched twice, and the row that was first would wear the other's
+# numbers.
+check "the analytics row is keyed by the channel" src/components/AnalyticsView.vue \
+  '                            :key="row.channel"
+                            class="border-b border-border last:border-b-0"' \
+  '                            :key="row.platform"
+                            class="border-b border-border last:border-b-0"' \
+  tests/components/AnalyticsView.spec.ts
+
+# 65. The legend's swatch is the channel's colour — the aggregator's route is
+# lighter than the plugin's own.
+check "the legend swatch is the channel's colour" src/components/AnalyticsView.vue \
+  'return channelOf(row.via, row.platform)' \
+  "return channelOf('direct', row.platform)" \
+  tests/components/AnalyticsView.spec.ts
+
+# 66. The series key is read as a channel, not as a network's name.
+check "the series key is read as a channel" src/components/AnalyticsView.vue \
+  'background: chartColorVar(channelFromKey(channel)),' \
+  "background: chartColorVar(channelOf('direct', channel))," \
+  tests/components/AnalyticsView.spec.ts
+
+# 67. The route shifts the lightness, so two routes of one network are two
+# colours.
+check "the route shifts the lightness" src/lib/platforms.ts \
+  'const shift = channel.via === DIRECT_ROUTE ? 0 : AGGREGATOR_LIGHTNESS' \
+  'const shift = 0' \
+  tests/lib/platforms.spec.ts
+
 
 
 # 10. The theme toggle writes the persisted value.
@@ -208,8 +239,8 @@ check "post reach null" src/lib/metrics.ts \
 
 # 26. The network table shows a dash for a counter that was never reported.
 check "network null reach" src/components/AnalyticsView.vue \
-  '{{ formatCounter(network.reach) }}' \
-  '{{ network.reach.toLocaleString() }}' \
+  '{{ formatCounter(row.reach) }}' \
+  '{{ row.reach.toLocaleString() }}' \
   tests/components/AnalyticsView.spec.ts
 
 # 27. The reach tile shows a dash when no network reported a reach.

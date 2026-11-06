@@ -146,6 +146,15 @@ export function networksOnTwoRoutes(channels: Channel[]): Network[] {
 const NETWORKS_WITH_A_COLOUR: Network[] = ['linkedin', 'facebook', 'instagram']
 
 /**
+ * How much lighter an aggregator's route is than the plugin's own.
+ *
+ * A stacked bar tells its segments apart by colour, so two routes of one
+ * network must not share one — and eight points of lightness is enough to
+ * tell them apart while the hue still says which network it is.
+ */
+const AGGREGATOR_LIGHTNESS = 8
+
+/**
  * The colour a network's name hashes to.
  *
  * The same name always gives the same colour, so a network looks the same
@@ -171,22 +180,40 @@ function networkColour(network: Network): { hue: number; saturation: number; lig
 }
 
 /**
- * The chart series colour for a network.
+ * The chart series colour for a channel.
  *
  * Deliberately not the platform brand hue: LinkedIn's and Facebook's blues
  * are too close to tell apart in a stacked bar. The brand hue is for the
  * chip, where it is the only colour on the element.
  *
+ * **The hue is the network's and the lightness is the route's.** The same
+ * network on two routes is two segments of one bar, and two segments of one
+ * colour cannot be told apart — so the aggregator's route is lighter than
+ * the plugin's own. The hue stays the network's, because it is the same
+ * network's brand.
+ *
  * A hashed colour is mixed towards the foreground, because the foreground
  * is what the theme inverts — the same hue is a dark blue on a white card
  * and a pale blue on a near-black one.
  */
-export function chartColorVar(network: Network): string {
-    if (NETWORKS_WITH_A_COLOUR.includes(network)) return `hsl(var(--chart-${network}))`
+export function chartColorVar(channel: Channel): string {
+    const network = channel.network
+    const shift = channel.via === DIRECT_ROUTE ? 0 : AGGREGATOR_LIGHTNESS
+
+    if (NETWORKS_WITH_A_COLOUR.includes(network)) {
+        const variable = `var(--chart-${network})`
+
+        if (shift === 0) return `hsl(${variable})`
+
+        // The relative colour syntax shifts the variable's own lightness, so
+        // the hand-picked hue survives the theme's two values instead of
+        // being written down twice.
+        return `hsl(from hsl(${variable}) h s calc(l + ${shift}))`
+    }
 
     const { hue, saturation, lightness } = networkColour(network)
 
-    return `color-mix(in oklab, hsl(${hue} ${saturation}% ${lightness}%) 78%, hsl(var(--foreground)))`
+    return `color-mix(in oklab, hsl(${hue} ${saturation}% ${lightness + shift}%) 78%, hsl(var(--foreground)))`
 }
 
 /** The network brand hue — a chip accent, never a chart series. */

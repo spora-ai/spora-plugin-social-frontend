@@ -286,24 +286,36 @@ export interface AnalyticsTotals {
 export interface NetworkTotals extends AnalyticsTotals {
     /** The network the numbers are about. */
     platform: Network
+    /**
+     * The channel's key — the route, then the network.
+     *
+     * The row is a **channel**, not a network: the same network reached
+     * through two routes is two accounts with two sets of numbers, and the
+     * key is what tells the two rows apart.
+     */
+    channel: string
+    /** The route the numbers came through. */
+    via: Route
     posts: number
 }
 
 export interface AnalyticsPoint {
     date: string
     /**
-     * The reach each network reported that day, keyed by the network's name.
+     * The reach each channel reported that day, keyed by the channel's key.
      *
-     * A key is **absent** when that network reported no reach — an absent key
+     * A key is **absent** when that channel reported no reach — an absent key
      * is not a zero, and a day with one missing key must still add up.
      */
-    [network: string]: string | number | undefined
+    [channel: string]: string | number | undefined
 }
 
 export interface TopPost {
     post_id: number
     title: string
     platform: Network
+    /** The route the post went out through. */
+    via: Route
     /** Null when the network reported no reach for this post. */
     reach: number | null
     /** Null when the network reported no impressions for this post. */
