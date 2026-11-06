@@ -2,18 +2,21 @@
 /**
  * The accounts a post goes to.
  *
- * The composer picks an *account*, and the accounts arrive inside their
- * connection — so they are flattened before they get here. The token is not
- * on the account any more: it belongs to the connection, and the connection
- * card is where its health is shown.
+ * **One picker, grouped by route.** Everything the operator can post to is in
+ * one place: the accounts the plugin reaches on its own under *Direct*, and
+ * the accounts an aggregator reaches under the aggregator's own name. The
+ * composer stays one flow.
  *
- * **The name of a network comes from the backend's rules.** A copy here is
- * where a name goes stale, and the aggregator brings networks this frontend
- * has never heard of.
+ * **Only the accounts the plugin can publish to are offered.** A network the
+ * plugin does not reach has no rules row — no limits, no name, no colour —
+ * and offering the account would be a control that cannot do anything.
+ *
+ * The token is not on the account: it belongs to the connection, and the
+ * connection card is where its health is shown.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { brandColorVar, networkLabel, routeLabel } from '../lib/platforms'
+import { brandColorVar, channelKey, DIRECT_ROUTE, networkLabel, routeLabel } from '../lib/platforms'
 import type { Network, Route, SocialAccount, SocialConfig } from '../types'
 
 const props = defineProps<{
@@ -24,7 +27,8 @@ const props = defineProps<{
     /**
      * The plugin's configuration.
      *
-     * It carries the rules, and the rules carry the networks' names.
+     * It carries the rules — which channels the plugin can publish to — and
+     * the aggregators' names, which are the group headings.
      */
     config: SocialConfig | null
 }>()
@@ -44,22 +48,16 @@ const { t } = useI18n()
 const rules = computed(() => props.config?.rules ?? {})
 
 /**
- * The accounts, grouped by the network they are on.
+ * Whether the account can be published to at all.
  *
- * A network on two routes is one group with two rows: the accounts are
- * different, and the row says which route it publishes through.
+ * A config that has not arrived is not the same answer as a channel without
+ * a rule: the rules are *unknown* then, and refusing every account would
+ * leave the operator with nothing to publish to.
  */
-const groups = computed(() => {
-    const byNetwork: Record<string, SocialAccount[]> = {}
-
-    for (const account of props.accounts) {
-        const list = byNetwork[account.platform] ?? []
-        list.push(account)
-        byNetwork[account.platform] = list
-    }
-
-    return Object.entries(byNetwork).map(([network, accounts]) => ({ network, accounts }))
-})
+function isOffered(account: SocialAccount): boolean {
+    if (!props.config) return true
+    return rules.value[channelKey(account.via, account.platform)] !== undefined
+}
 
 /**
  * The name of a route.
@@ -70,6 +68,37 @@ const groups = computed(() => {
 function labelOfRoute(via: Route): string {
     return routeLabel(via, props.config?.aggregators ?? {})
 }
+
+/**
+ * The accounts, grouped by the route they publish through.
+ *
+ * The plugin's own route comes first and the aggregators follow it, in the
+ * order the backend names them — so the accounts the operator connects
+ * directly are the ones they see first.
+ */
+const groups = computed(() => {
+    const byRoute = new Map<Route, SocialAccount[]>()
+
+    for (const account of props.accounts) {
+        if (!isOffered(account)) continue
+        const list = byRoute.get(account.via) ?? []
+        list.push(account)
+        byRoute.set(account.via, list)
+    }
+
+    const routes = [...byRoute.keys()].sort((a, b) => {
+        if (a === b) return 0
+        if (a === DIRECT_ROUTE) return -1
+        if (b === DIRECT_ROUTE) return 1
+        return a.localeCompare(b)
+    })
+
+    return routes.map((via) => ({
+        via,
+        label: labelOfRoute(via),
+        accounts: byRoute.get(via) ?? [],
+    }))
+})
 
 /** The name of the network an account is on. */
 function labelFor(network: Network): string {
@@ -89,15 +118,11 @@ function toggle(id: number): void {
 </script>
 
 <template>
-    <div class="space-y-2" data-test="account-picker">
-        <div v-for="group in groups" :key="group.network">
+    <div class="space-y-3" data-test="account-picker">
+        <div v-for="group in groups" :key="group.via" :data-test="`route-group-${group.via}`">
             <div class="flex items-center gap-2">
-                <span
-                    class="platform-chip"
-                    :data-network="group.network"
-                    :style="{ '--network-color': brandColorVar(group.network) }"
-                >
-                    {{ labelFor(group.network) }}
+                <span class="field-label mb-0" :data-test="`route-group-label-${group.via}`">
+                    {{ group.label }}
                 </span>
             </div>
             <div class="mt-1.5 space-y-1">
@@ -114,6 +139,13 @@ function toggle(id: number): void {
                         :data-test="`target-${account.id}`"
                         @change="toggle(account.id)"
                     />
+                    <span
+                        class="platform-chip shrink-0"
+                        :data-network="account.platform"
+                        :style="{ '--network-color': brandColorVar(account.platform) }"
+                    >
+                        {{ labelFor(account.platform) }}
+                    </span>
                     <span class="min-w-0 flex-1">
                         <span class="block truncate text-sm font-medium">{{ account.display_name }}</span>
                         <span class="block truncate text-[11px] text-muted-foreground">
