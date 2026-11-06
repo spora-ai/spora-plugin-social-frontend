@@ -364,6 +364,16 @@ export async function listMedia(
     )
 }
 
+/**
+ * Whether an asset fits the channels, in the backend's own words.
+ *
+ * The backend's verdict is the authority: it judges the media as the
+ * network receives it — Instagram takes no PNG, and the pipeline converts
+ * one first — so a verdict computed here would warn about a post that goes
+ * out.
+ *
+ * The channels are the channel's keys, the route and then the network.
+ */
 export async function checkMediaFit(
     principalId: number,
     mediaAssetId: string,

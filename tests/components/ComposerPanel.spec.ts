@@ -61,9 +61,31 @@ async function mountEditing(post: SocialPost): Promise<Mounted> {
 /** The composer, publishing to an Instagram account, with the given media attached. */
 async function mountWithMedia(
     assets: ReturnType<typeof asset>[],
+    verdict: { fits: boolean; reasons: string[]; remedy: string | null } = {
+        fits: true,
+        reasons: [],
+        remedy: null,
+    },
 ): Promise<Mounted> {
     const openMediaPicker = vi.fn().mockResolvedValue(assets)
-    const mounted = mountComposer(hostContext({ openMediaPicker }))
+    const context = hostContext({ openMediaPicker })
+    // The backend's verdict on the attachment, in the shape it answers with.
+    context.api.post = vi.fn().mockResolvedValue({
+        fits: verdict.fits,
+        per_channel: [
+            {
+                channel: 'direct:instagram',
+                network: 'instagram',
+                via: 'direct',
+                fits: verdict.fits,
+                reasons: verdict.reasons,
+                remedy: verdict.remedy,
+                mime_type: 'image/png',
+            },
+        ],
+    }) as never
+
+    const mounted = mountComposer(context)
     mounted.social.connections = [
         makeConnection({ accounts: [makeAccount({ id: 13, platform: 'instagram' })] }),
     ]
@@ -247,13 +269,49 @@ describe('ComposerPanel — the media', () => {
         expect(wrapper.find('[data-test="preview-direct:instagram"]').text()).toContain('Media required')
     })
 
+    it('asks the backend whether the media fits the channel', async () => {
+        const { context } = await mountWithMedia([asset('asset-1', 'chart.png', 'image/png')])
+
+        const call = (context.api.post as ReturnType<typeof vi.fn>).mock.calls.find((call) =>
+            String(call[0]).includes('check-fit'),
+        )
+
+        expect(call?.[1]).toMatchObject({
+            principal_id: 7,
+            media_asset_id: 'asset-1',
+            channels: ['direct:instagram'],
+        })
+    })
+
     it('says that the media does not fit the network', async () => {
-        // Instagram takes JPEG or MP4; the picker handed back a PNG.
-        const { wrapper } = await mountWithMedia([asset('asset-1', 'chart.png', 'image/png')])
+        // Instagram takes JPEG or MP4, and a MOV is neither.
+        const { wrapper } = await mountWithMedia(
+            [asset('asset-1', 'clip.mov', 'video/quicktime')],
+            {
+                fits: false,
+                reasons: ['Instagram does not accept video/quicktime.'],
+                remedy: 'Convert the file to MP4',
+            },
+        )
 
         expect(wrapper.find('[data-test="preview-direct:instagram"]').text()).toContain(
             'The media does not fit this network',
         )
+        // And the badge names what is wrong, in the backend's words.
+        expect(wrapper.find('[data-test="media-fit-asset-1-direct:instagram"]').text()).toContain(
+            'Instagram does not accept video/quicktime.',
+        )
+    })
+
+    it('says nothing about a file the backend converts on the way out', async () => {
+        // Instagram takes no PNG — and the pipeline converts one first, so
+        // the post goes out. A fit computed here would warn about it.
+        const { wrapper } = await mountWithMedia([asset('asset-1', 'chart.png', 'image/png')])
+
+        expect(wrapper.find('[data-test="preview-direct:instagram"]').text()).not.toContain(
+            'The media does not fit this network',
+        )
+        expect(wrapper.find('[data-test="media-fit-asset-1-direct:instagram"]').exists()).toBe(false)
     })
 
     it('says that the network fetches the media itself', async () => {

@@ -173,7 +173,7 @@ describe('api/social — the paths', () => {
         await social.publishPost(3, 88)
         await social.retryPost(3, 88)
         await social.getPostAnalytics(3, 88)
-        await social.checkMediaFit(3, 'asset-1', ['linkedin'])
+        await social.checkMediaFit(3, 'asset-1', ['direct:linkedin'])
         await social.prepareMedia(3, 'asset-1', 'instagram')
         await social.attachMedia(3, 88, 'asset-1', 0)
         await social.detachMedia(3, 88, 'asset-1')

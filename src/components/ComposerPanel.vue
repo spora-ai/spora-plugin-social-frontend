@@ -44,14 +44,13 @@ import {
     charCount,
     composeText,
     DIRECT_ROUTE,
-    mediaFit,
     networkLabel,
     networksOnTwoRoutes,
     parseHashtags,
     routeLabel,
 } from '../lib/platforms'
 import { composePath } from '../lib/paths'
-import type { Channel, ComposerAttachment, PlatformRules, SocialPost } from '../types'
+import type { Channel, ComposerAttachment, MediaFitResult, PlatformRules, SocialPost } from '../types'
 
 const props = defineProps<{
     /** The principal the post is written for. */
@@ -71,6 +70,10 @@ const channelBodies = ref<Record<string, string>>({})
 /** The hashtags as the operator typed them; the hashes are added on the way out. */
 const hashtagInput = ref('')
 const attachments = ref<ComposerAttachment[]>([])
+/** The backend's verdict on each attachment, per channel. */
+const mediaVerdicts = ref<Record<string, MediaFitResult[]>>({})
+/** The fit check in flight — a later answer does not answer a later question. */
+let mediaCheck = 0
 const targetIds = ref<number[]>([])
 const mode = ref<'draft' | 'schedule' | 'now'>('schedule')
 const date = ref(new Date().toISOString().slice(0, 10))
@@ -245,9 +248,19 @@ const previews = computed(() =>
             mediaRequired: rule?.media_required === true,
             mediaCount: rule?.media_count ?? null,
             fetchesMedia: rule?.fetches_media === true,
-            mediaFits:
-                rule === undefined ||
-                attachments.value.every((attachment) => mediaFit(attachment, rule).fits),
+            /**
+             * The backend's verdict on every attachment, for this channel.
+             *
+             * An attachment that has not been judged yet counts as fitting:
+             * the badge is advice, and the publish-time refusal is the
+             * authority.
+             */
+            mediaFits: attachments.value.every((attachment) => {
+                const verdict = (mediaVerdicts.value[attachment.media_asset_id] ?? []).find(
+                    (entry) => entry.channel === channel.key,
+                )
+                return verdict === undefined || verdict.fits
+            }),
         }
     }),
 )
@@ -323,6 +336,48 @@ const submitLabel = computed(() => {
 
 function removeAttachment(mediaAssetId: string): void {
     attachments.value = attachments.value.filter((item) => item.media_asset_id !== mediaAssetId)
+}
+
+/**
+ * Ask the backend whether the attachments fit the channels.
+ *
+ * The backend's verdict is the authority: it judges the media as the
+ * network receives it — Instagram takes no PNG, and the pipeline converts
+ * one before it goes out — so a fit computed here would warn about a post
+ * that goes out.
+ *
+ * A check that could not be made says nothing: the badge is advice, and
+ * the refusal at publish time is the authority.
+ */
+async function checkMedia(): Promise<void> {
+    const channels = targetedChannelKeys.value
+    const assets = attachments.value
+    // The question in flight: an answer that arrives after a later
+    // question was asked is an answer to a question nobody has any more.
+    const asked = ++mediaCheck
+
+    if (channels.length === 0 || assets.length === 0) {
+        mediaVerdicts.value = {}
+        return
+    }
+
+    try {
+        const verdicts = await Promise.all(
+            assets.map(async (attachment) => {
+                const result = await socialApi.checkMediaFit(
+                    props.principalId,
+                    attachment.media_asset_id,
+                    channels,
+                )
+                return [attachment.media_asset_id, result.per_channel] as const
+            }),
+        )
+        if (asked !== mediaCheck) return
+        mediaVerdicts.value = Object.fromEntries(verdicts)
+    } catch {
+        if (asked !== mediaCheck) return
+        mediaVerdicts.value = {}
+    }
 }
 
 /**
@@ -660,6 +715,10 @@ watch(
     },
 )
 
+// The verdict follows the attachments and the channels: a file that fits one
+// channel and not another is a different question.
+watch([() => attachments.value, targetedChannelKeys], () => void checkMedia(), { deep: true })
+
 async function submit(): Promise<void> {
     submitting.value = true
     try {
@@ -932,7 +991,7 @@ async function submit(): Promise<void> {
                     <MediaStrip
                         :attachments="attachments"
                         :channels="targetedChannelKeys"
-                        :rules="social.rules"
+                        :verdicts="mediaVerdicts"
                         @remove="removeAttachment"
                     />
                 </div>

@@ -10,7 +10,6 @@ import {
     chartColorVar,
     charCount,
     composeText,
-    mediaFit,
     NETWORKS_WITH_A_COLOUR,
     networkLabel,
     networksOnTwoRoutes,
@@ -83,52 +82,10 @@ describe('lib/platforms', () => {
         expect(charCount(emoji.repeat(limit + 1), limit).over).toBe(true)
     })
 
-    it('quotes the backend’s wording on the media fit', () => {
-        const fit = mediaFit(
-            { mime_type: 'image/png', size_bytes: 1000 },
-            rules['direct:instagram']!,
-        )
-
-        expect(fit.fits).toBe(false)
-        expect(fit.reason).toBe(rules['direct:instagram']!.media_note)
-        expect(fit.remedy).toBe(rules['direct:instagram']!.media_remedy)
-    })
-
-    it('names the action for a video the platform rejects', () => {
-        const fit = mediaFit(
-            { mime_type: 'video/quicktime', size_bytes: 1000 },
-            rules['direct:instagram']!,
-        )
-
-        expect(fit.remedy).toBe(rules['direct:instagram']!.video_remedy)
-    })
-
-    it('accepts a PNG on the networks that take one', () => {
-        expect(mediaFit({ mime_type: 'image/png', size_bytes: 1000 }, rules['direct:linkedin']!).fits).toBe(true)
-        expect(mediaFit({ mime_type: 'image/png', size_bytes: 1000 }, rules['direct:facebook']!).fits).toBe(true)
-    })
-
-    it('names the remedy for a file over the network’s cap', () => {
-        const fit = mediaFit(
-            { mime_type: 'image/jpeg', size_bytes: rules['direct:linkedin']!.max_bytes + 1 },
-            rules['direct:linkedin']!,
-        )
-
-        expect(fit.fits).toBe(false)
-        expect(fit.remedy).toBe(rules['direct:linkedin']!.size_remedy)
-    })
-
     it('counts an absent body as no characters', () => {
         expect(charCount('', rules['direct:linkedin']!.max_text).n).toBe(0)
     })
 
-    it('accepts an asset with no mime type of its own', () => {
-        // Nothing to judge it against is not a refusal: the backend refuses
-        // the file, not the composer.
-        const fit = mediaFit({ mime_type: null, size_bytes: 1000 }, rules['direct:instagram']!)
-
-        expect(fit.fits).toBe(true)
-    })
 })
 
 describe('lib/platforms — the channel', () => {

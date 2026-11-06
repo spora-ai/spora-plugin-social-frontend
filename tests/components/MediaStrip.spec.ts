@@ -2,41 +2,58 @@ import { describe, it, expect } from 'vitest'
 import MediaStrip from '../../src/components/MediaStrip.vue'
 import { makeAttachment } from '../fixtures'
 import { mountComponent } from '../mountPage'
-import { CONFIG_PAYLOAD } from '../recorded'
+import type { MediaFitResult } from '../../src/types'
 
-const rules = CONFIG_PAYLOAD.rules
+/**
+ * The backend's verdict on one attachment, per channel.
+ *
+ * The wording is the backend's: the reason names what is wrong and the
+ * remedy names what to do about it.
+ */
+function verdict(overrides: Partial<MediaFitResult> = {}): MediaFitResult {
+    return {
+        channel: 'direct:instagram',
+        network: 'instagram',
+        via: 'direct',
+        fits: false,
+        reasons: ['Instagram does not accept image/png.'],
+        remedy: 'Convert to JPEG',
+        mime_type: 'image/png',
+        ...overrides,
+    }
+}
 
 describe('MediaStrip', () => {
     it('says nothing when there is no media', () => {
         const wrapper = mountComponent(MediaStrip, {
             attachments: [],
-            channels: ['direct:linkedin'],
-            rules,
+            channels: ['direct:instagram'],
+            verdicts: {},
         })
         expect(wrapper.text()).toContain('No media attached')
     })
 
-    it('badges the fit for the platform currently targeted', () => {
+    it('badges the fit for the channel that does not take it', () => {
         const wrapper = mountComponent(MediaStrip, {
             attachments: [makeAttachment({ media_asset_id: 'a1', mime_type: 'image/png' })],
             channels: ['direct:instagram'],
-            rules,
+            verdicts: { a1: [verdict()] },
         })
 
         const badge = wrapper.find('[data-test="media-fit-a1-direct:instagram"]')
         expect(badge.exists()).toBe(true)
-        expect(badge.text()).toContain(rules['direct:instagram']!.media_note)
+        expect(badge.text()).toContain('Instagram does not accept image/png.')
     })
 
     it('quotes the backend’s wording, not one of its own', () => {
         const wrapper = mountComponent(MediaStrip, {
             attachments: [makeAttachment({ media_asset_id: 'a1', mime_type: 'image/png' })],
             channels: ['direct:instagram'],
-            rules,
+            verdicts: { a1: [verdict()] },
         })
 
         const badge = wrapper.find('[data-test="media-fit-a1-direct:instagram"]').text()
-        expect(badge).toContain('Instagram accepts JPEG or MP4, up to 100 MB.')
+        expect(badge).toContain('Instagram does not accept image/png.')
         expect(badge).not.toContain('Instagram accepts JPEG only')
     })
 
@@ -44,43 +61,59 @@ describe('MediaStrip', () => {
         const wrapper = mountComponent(MediaStrip, {
             attachments: [makeAttachment({ media_asset_id: 'a1', mime_type: 'image/png' })],
             channels: ['direct:instagram'],
-            rules,
+            verdicts: { a1: [verdict()] },
         })
 
         expect(wrapper.find('[data-test="media-fit-a1-direct:instagram"]').text()).toContain(
-            rules['direct:instagram']!.media_remedy,
+            'Convert to JPEG',
         )
     })
 
-    it('says nothing about a platform that is not targeted', () => {
-        // A PNG is fine on LinkedIn; the badge is about the networks the post
-        // is going to, not about the file in general.
+    it('says nothing about a channel that is not targeted', () => {
+        // The verdict is about the channels the post is going to, not about
+        // the file in general.
         const wrapper = mountComponent(MediaStrip, {
             attachments: [makeAttachment({ media_asset_id: 'a1', mime_type: 'image/png' })],
-            channels: ['direct:linkedin'],
-            rules,
+            channels: ['direct:instagram'],
+            verdicts: { a1: [verdict({ channel: 'direct:linkedin', network: 'linkedin' })] },
         })
 
         expect(wrapper.find('[data-test="media-fit-a1-direct:instagram"]').exists()).toBe(false)
     })
 
-    it('badges every targeted platform that does not fit', () => {
+    it('badges every targeted channel that does not fit', () => {
         const wrapper = mountComponent(MediaStrip, {
             attachments: [makeAttachment({ media_asset_id: 'a1', mime_type: 'image/png' })],
-            channels: ['direct:instagram'],
-            rules,
+            channels: ['direct:instagram', 'direct:linkedin'],
+            verdicts: {
+                a1: [
+                    verdict(),
+                    verdict({ channel: 'direct:linkedin', network: 'linkedin' }),
+                ],
+            },
         })
 
         expect(wrapper.find('[data-test="media-fit-a1-direct:instagram"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="media-fit-a1-direct:linkedin"]').exists()).toBe(true)
     })
 
-    it('says nothing while the rule has not arrived', () => {
-        // Without the rule there is nothing to judge the file against, and
-        // the frontend does not guess a limit of its own.
+    it('says nothing about a file the backend found no fault with', () => {
         const wrapper = mountComponent(MediaStrip, {
             attachments: [makeAttachment({ media_asset_id: 'a1', mime_type: 'image/png' })],
             channels: ['direct:instagram'],
-            rules: {},
+            verdicts: { a1: [verdict({ fits: true, reasons: [], remedy: null })] },
+        })
+
+        expect(wrapper.find('[data-test="media-fit-a1-direct:instagram"]').exists()).toBe(false)
+    })
+
+    it('says nothing while the verdict has not arrived', () => {
+        // Without a verdict there is nothing to say, and the frontend does
+        // not judge the file against a rule of its own.
+        const wrapper = mountComponent(MediaStrip, {
+            attachments: [makeAttachment({ media_asset_id: 'a1', mime_type: 'image/png' })],
+            channels: ['direct:instagram'],
+            verdicts: {},
         })
 
         expect(wrapper.find('[data-test="media-fit-a1-direct:instagram"]').exists()).toBe(false)
@@ -89,8 +122,8 @@ describe('MediaStrip', () => {
     it('removes an attachment', async () => {
         const wrapper = mountComponent(MediaStrip, {
             attachments: [makeAttachment({ media_asset_id: 'a1' })],
-            channels: ['direct:linkedin'],
-            rules,
+            channels: ['direct:instagram'],
+            verdicts: {},
         })
 
         expect(wrapper.find('[data-test="media-remove-a1"]').exists()).toBe(true)
