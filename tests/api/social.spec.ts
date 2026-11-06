@@ -341,6 +341,35 @@ describe('api/social — the shapes', () => {
         expect(Object.keys(calendar)).toEqual(['posts'])
     })
 
+    it('reads the channels the calendar sent with the posts', async () => {
+        get.mockResolvedValueOnce(CALENDAR_PAYLOAD)
+        const calendar = await social.getCalendar(3, '2026-11')
+
+        // The calendar answers what is going out and where, so the channels
+        // come with the posts.
+        expect(calendar.posts[0]?.channels.map((channel) => channel.key)).toEqual([
+            'direct:linkedin',
+            'zernio:bluesky',
+        ])
+    })
+
+    it('shows a post without channels without a chip, rather than breaking', async () => {
+        get.mockResolvedValueOnce({
+            posts: [
+                {
+                    post_id: 88,
+                    title: 'Q4 release',
+                    status: 'scheduled',
+                    scheduled_for: '2026-11-02T09:00:00+00:00',
+                    published_at: null,
+                },
+            ],
+        })
+        const calendar = await social.getCalendar(3, '2026-11')
+
+        expect(calendar.posts[0]?.channels).toEqual([])
+    })
+
     it('fills an analytics summary that comes back empty', async () => {
         get.mockResolvedValueOnce({})
         const summary = await social.getAnalyticsSummary(3)

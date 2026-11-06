@@ -74,6 +74,24 @@ export function channelFromKey(key: string): Channel {
 }
 
 /**
+ * The channels a set of channel entries names — one per channel.
+ *
+ * The backend sends one entry per **target**, and a target is an account:
+ * two accounts on one channel arrive as two entries that name the same
+ * channel. A screen that draws a chip per entry would draw the same chip
+ * twice, so the entries are folded by the channel's key.
+ */
+export function uniqueChannels(channels: Channel[]): Channel[] {
+    const unique: Channel[] = []
+
+    for (const channel of channels) {
+        if (!unique.some((existing) => existing.key === channel.key)) unique.push(channel)
+    }
+
+    return unique
+}
+
+/**
  * The label of a channel — the network's name, in the rules' words.
  *
  * A channel with no rule has no label: the plugin does not offer it, so

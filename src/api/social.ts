@@ -305,7 +305,13 @@ export async function getCalendar(principalId: number, month: string): Promise<C
     })
     // The month carries the posts and nothing else: the `days` key existed
     // only for the slot tint, and the static slot is gone.
-    return { posts: result.posts ?? [] }
+    //
+    // The channels go along with the posts, and a post that arrives without
+    // them is a post the calendar shows without a chip — not a post that
+    // breaks the month.
+    return {
+        posts: (result.posts ?? []).map((post) => ({ ...post, channels: post.channels ?? [] })),
+    }
 }
 
 /**

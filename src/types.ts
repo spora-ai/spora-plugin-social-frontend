@@ -260,6 +260,13 @@ export interface CalendarPost {
     status: PostStatus
     scheduled_for: string | null
     published_at: string | null
+    /**
+     * The channels the post goes to — one entry per target.
+     *
+     * Two targets on one channel arrive as two entries, because a target is
+     * an account and a channel is a route to a network.
+     */
+    channels: Channel[]
 }
 
 export interface CalendarPayload {

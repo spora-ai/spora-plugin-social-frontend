@@ -383,6 +383,10 @@ export const CALENDAR_PAYLOAD = {
             status: 'scheduled',
             scheduled_for: '2026-11-02T09:00:00+00:00',
             published_at: null,
+            channels: [
+                { key: 'direct:linkedin', network: 'linkedin', via: 'direct' },
+                { key: 'zernio:bluesky', network: 'bluesky', via: 'zernio' },
+            ],
         },
     ],
 } satisfies CalendarPayload

@@ -123,6 +123,17 @@ check "the route shifts the lightness" src/lib/platforms.ts \
   'const shift = 0' \
   tests/lib/platforms.spec.ts
 
+# 68. The calendar draws the channels a post goes to.
+check "the calendar draws the channels" src/components/CalendarGrid.vue \
+  'return uniqueChannels(post.channels)' \
+  'return []' \
+  tests/components/CalendarGrid.spec.ts
+
+# 69. Two accounts on one channel are one chip.
+check "the calendar folds the channels" src/components/CalendarGrid.vue \
+  'return uniqueChannels(post.channels)' \
+  'return post.channels' \
+  tests/components/CalendarGrid.spec.ts
 
 
 # 10. The theme toggle writes the persisted value.

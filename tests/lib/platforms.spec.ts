@@ -15,6 +15,7 @@ import {
     networksOnTwoRoutes,
     parseHashtags,
     routeLabel,
+    uniqueChannels,
 } from '../../src/lib/platforms'
 import { CONFIG_PAYLOAD } from '../recorded'
 
@@ -184,6 +185,33 @@ describe('lib/platforms — the channel', () => {
         const channels = [channelFromKey('direct:linkedin'), channelFromKey('zernio:bluesky')]
 
         expect(networksOnTwoRoutes(channels)).toEqual([])
+    })
+
+    it('folds two entries of one channel into one', () => {
+        // The backend sends one entry per target, and a target is an
+        // account: two accounts on one channel are one channel.
+        const channels = uniqueChannels([
+            channelFromKey('direct:linkedin'),
+            channelFromKey('direct:linkedin'),
+            channelFromKey('zernio:linkedin'),
+        ])
+
+        expect(channels.map((channel) => channel.key)).toEqual([
+            'direct:linkedin',
+            'zernio:linkedin',
+        ])
+    })
+
+    it('keeps two routes to one network apart', () => {
+        const channels = uniqueChannels([
+            channelFromKey('direct:linkedin'),
+            channelFromKey('zernio:linkedin'),
+        ])
+
+        expect(channels.map((channel) => channel.key)).toEqual([
+            'direct:linkedin',
+            'zernio:linkedin',
+        ])
     })
 })
 

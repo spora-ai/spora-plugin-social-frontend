@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import CalendarGrid from '../../src/components/CalendarGrid.vue'
+import { CONFIG_PAYLOAD } from '../recorded'
 import { mountComponent } from '../mountPage'
 
 describe('CalendarGrid', () => {
@@ -14,9 +15,9 @@ describe('CalendarGrid', () => {
                     status: 'scheduled',
                     scheduled_for: '2026-11-09T09:00:00+00:00',
                     published_at: null,
+                    channels: [],
                 },
             ],
-            slots: [],
         })
 
         expect(wrapper.find('[data-test="calendar-post-88"]').exists()).toBe(true)
@@ -51,6 +52,7 @@ describe('CalendarGrid', () => {
                     status: 'published',
                     scheduled_for: null,
                     published_at: '2026-11-16T09:00:00+00:00',
+                    channels: [],
                 },
             ],
         })
@@ -68,5 +70,105 @@ describe('CalendarGrid', () => {
         await wrapper.find(`[data-test="${button}"]`).trigger('click')
 
         expect(wrapper.emitted('month-change')).toEqual([[expected]])
+    })
+})
+
+describe('CalendarGrid — the channels a post goes to', () => {
+    it('draws one chip per channel, with the network and the route', () => {
+        const wrapper = mountComponent(CalendarGrid, {
+            month: '2026-11',
+            config: CONFIG_PAYLOAD,
+            posts: [
+                {
+                    post_id: 88,
+                    title: 'Q4 release',
+                    status: 'scheduled',
+                    scheduled_for: '2026-11-09T09:00:00+00:00',
+                    published_at: null,
+                    channels: [
+                        { key: 'direct:linkedin', network: 'linkedin', via: 'direct' },
+                        { key: 'zernio:bluesky', network: 'bluesky', via: 'zernio' },
+                    ],
+                },
+            ],
+        })
+
+        // The calendar answers what is going out and where, so the chip says
+        // which network and which route to it.
+        const linkedin = wrapper.find('[data-test="calendar-channel-direct:linkedin"]')
+        expect(linkedin.text()).toContain('LinkedIn')
+        expect(linkedin.text()).toContain('Direct')
+
+        const bluesky = wrapper.find('[data-test="calendar-channel-zernio:bluesky"]')
+        expect(bluesky.text()).toContain('Bluesky')
+        expect(bluesky.text()).toContain('Zernio')
+    })
+
+    it('draws one chip for two accounts on one channel', () => {
+        const wrapper = mountComponent(CalendarGrid, {
+            month: '2026-11',
+            config: CONFIG_PAYLOAD,
+            posts: [
+                {
+                    post_id: 88,
+                    title: 'Q4 release',
+                    status: 'scheduled',
+                    scheduled_for: '2026-11-09T09:00:00+00:00',
+                    published_at: null,
+                    // The backend sends one entry per target, and a target is
+                    // an account: two accounts on one channel are one
+                    // channel.
+                    channels: [
+                        { key: 'direct:linkedin', network: 'linkedin', via: 'direct' },
+                        { key: 'direct:linkedin', network: 'linkedin', via: 'direct' },
+                    ],
+                },
+            ],
+        })
+
+        expect(wrapper.findAll('[data-test="calendar-channel-direct:linkedin"]')).toHaveLength(1)
+    })
+
+    it('draws two chips for two routes to one network', () => {
+        const wrapper = mountComponent(CalendarGrid, {
+            month: '2026-11',
+            config: CONFIG_PAYLOAD,
+            posts: [
+                {
+                    post_id: 88,
+                    title: 'Q4 release',
+                    status: 'scheduled',
+                    scheduled_for: '2026-11-09T09:00:00+00:00',
+                    published_at: null,
+                    channels: [
+                        { key: 'direct:linkedin', network: 'linkedin', via: 'direct' },
+                        { key: 'zernio:linkedin', network: 'linkedin', via: 'zernio' },
+                    ],
+                },
+            ],
+        })
+
+        // One chip for the plugin's own route and one for the aggregator's —
+        // the same network, reached twice.
+        expect(wrapper.findAll('[data-test^="calendar-channel-"]')).toHaveLength(2)
+    })
+
+    it('draws no chip for a post with no channel', () => {
+        const wrapper = mountComponent(CalendarGrid, {
+            month: '2026-11',
+            config: CONFIG_PAYLOAD,
+            posts: [
+                {
+                    post_id: 88,
+                    title: 'Q4 release',
+                    status: 'draft',
+                    scheduled_for: '2026-11-09T09:00:00+00:00',
+                    published_at: null,
+                    channels: [],
+                },
+            ],
+        })
+
+        expect(wrapper.findAll('[data-test^="calendar-channel-"]')).toHaveLength(0)
     })
 })

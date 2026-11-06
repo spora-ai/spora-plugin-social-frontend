@@ -9,7 +9,7 @@
  */
 import type { Channel, SocialPost } from '../types'
 import { NO_VALUE } from './format'
-import { channelOf } from './platforms'
+import { channelOf, uniqueChannels } from './platforms'
 
 /**
  * A counter, or a dash when the platform did not report it.
@@ -79,15 +79,9 @@ export function postEngagementRate(post: SocialPost): number | null {
  * The channels a post went to.
  *
  * The channel is the network *and* the route: the same network through two
- * routes is two accounts, and the row has to say which one it was.
+ * routes is two accounts, and the row has to say which one it was. Two
+ * accounts on one channel are one channel, so the row shows it once.
  */
 export function postChannels(post: SocialPost): Channel[] {
-    const channels: Channel[] = []
-
-    for (const target of post.targets) {
-        const channel = channelOf(target.via, target.platform)
-        if (!channels.some((existing) => existing.key === channel.key)) channels.push(channel)
-    }
-
-    return channels
+    return uniqueChannels(post.targets.map((target) => channelOf(target.via, target.platform)))
 }
