@@ -31,8 +31,10 @@
  *     interpolation syntax the project-wide i18n contract calls valid
  *     and expected. Rule 0 is "a key vue-i18n cannot compile", and
  *     vue-i18n compiles `{name}`.
- *   - `EXCLUDED_TERMS` — product names that read the same in every
- *     language are not copy, so they are not candidates.
+ *   - `EXCLUDED_TERMS` — the terms that are not translated: the product
+ *     names and the house words that read the same in every language.
+ *     They are not candidates, and a catalogue entry for one keeps its own
+ *     spelling.
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
@@ -77,13 +79,17 @@ const TARGET_LOCALES = ['de']
 const EXCLUDED_FILES = new Set(['dev-main.ts'])
 
 /**
- * Terms that are not copy, so they stay in the template as raw text.
+ * Terms that are not translated.
  *
  * The contract draws the line the same way: a string that is *only* a
  * proper noun, a technical identifier or a layout-bound code is excluded
  * from the catalogue rather than given an invented translation.
  * Leaving one out of the catalogue means it stays in the template as raw
  * text, so the scanner has to know that it is not copy.
+ *
+ * A term that is *in* the catalogue keeps its own spelling there: it is
+ * not copy, so the same word in German is the translation and not a missed
+ * one — and rule 3 below has to know that.
  *
  * The match is exact, so a phrase that merely contains one of these
  * terms ("Open the Principal list") is still reported.
@@ -98,6 +104,15 @@ const EXCLUDED_TERMS = new Set([
      */
     'Principal',
     'Principals',
+
+    /*
+     * The house term for the thing that reaches the networks the plugin
+     * does not reach itself. It is our word, the way "Principal" is ours,
+     * and the host's own German catalogue keeps such words untranslated.
+     * "Aggregator-Dienst" would be a second word for one concept, and the
+     * operator knows the thing by the name the screen gives it.
+     */
+    'Aggregator',
 
     /*
      * The networks' own names. They are the platforms' brand, they read
@@ -615,9 +630,13 @@ function reportGaps(keys, catalogues) {
         // is reported complete while shipping the English key untranslated.
         const missing = [...keys.keys()].filter((key) => !Object.hasOwn(catalogue, key))
         // Same predicate as rule 3, so a malformed value cannot throw here
-        // before the rule gets to report it properly.
+        // before the rule gets to report it properly — and a house word,
+        // which rule 3 exempts, is not a gap either.
         const placeholders = Object.entries(catalogue).filter(
-            ([key, value]) => typeof value !== 'string' || value.trim() === '' || value === key,
+            ([key, value]) =>
+                typeof value !== 'string' ||
+                value.trim() === '' ||
+                (value === key && !EXCLUDED_TERMS.has(key)),
         )
         if (missing.length === 0 && placeholders.length === 0) {
             console.log(`\n  ${locale}: complete`)
@@ -725,7 +744,11 @@ for (const [locale, catalogue] of catalogues) {
         if (typeof value !== 'string' || value.trim() === '') {
             enforce('placeholder', `${locale} has an empty translation\n\n  ${cataloguePath(locale)}\n    ${show(key)}`)
         } else if (value === key) {
-            enforce('placeholder', `${locale} has an English-identical value — untranslated placeholder\n\n  ${cataloguePath(locale)}\n    ${show(key)}`)
+            // A house word is not copy: the same word in German is the
+            // translation, not a missed one.
+            if (!EXCLUDED_TERMS.has(key)) {
+                enforce('placeholder', `${locale} has an English-identical value — untranslated placeholder\n\n  ${cataloguePath(locale)}\n    ${show(key)}`)
+            }
         }
         const bad = syntaxProblem(String(value))
         if (bad !== null) {

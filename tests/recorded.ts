@@ -30,8 +30,14 @@ import type {
  * `needs_setup` is the setup notice in the plugin's own wording: the plugin
  * emits it and the host translates it, so the frontend renders it as it comes.
  *
+ * The **aggregators** are a section of their own: an aggregator is not an
+ * OAuth provider — it has no client id and no redirect URI, only a key. The
+ * flag is **the principal's**, so the request names one.
+ *
  * The **rules** are the backend's own limits — it is what refuses the
- * publish, so the frontend must not keep a copy of them.
+ * publish, so the frontend must not keep a copy of them. They are keyed by
+ * the **channel's key**: the route, then the network. The same network on
+ * two routes is two channels with two sets of limits.
  */
 export const CONFIG_PAYLOAD = {
     providers: {
@@ -52,10 +58,21 @@ export const CONFIG_PAYLOAD = {
             redirect_uri: 'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
         },
     },
+    aggregators: {
+        zernio: {
+            // The principal has no key yet.
+            configured: false,
+            label: 'Zernio',
+            needs_setup: null,
+        },
+    },
     app_url: 'https://spora.example.com',
     app_url_public: true,
     rules: {
-        linkedin: {
+        'direct:linkedin': {
+            label: 'LinkedIn',
+            network: 'linkedin',
+            via: 'direct',
             media_required: false,
             media_count: 1,
             fetches_media: false,
@@ -67,8 +84,12 @@ export const CONFIG_PAYLOAD = {
             media_remedy: 'Convert to JPEG',
             video_remedy: 'Convert the file to MP4',
             size_remedy: 'Compress',
+            counting_note: null,
         },
-        facebook: {
+        'direct:facebook': {
+            label: 'Facebook',
+            network: 'facebook',
+            via: 'direct',
             media_required: false,
             media_count: 1,
             fetches_media: false,
@@ -80,8 +101,12 @@ export const CONFIG_PAYLOAD = {
             media_remedy: 'Convert to JPEG',
             video_remedy: 'Convert to JPEG',
             size_remedy: 'Compress',
+            counting_note: null,
         },
-        instagram: {
+        'direct:instagram': {
+            label: 'Instagram',
+            network: 'instagram',
+            via: 'direct',
             media_required: true,
             media_count: 1,
             fetches_media: true,
@@ -93,6 +118,77 @@ export const CONFIG_PAYLOAD = {
             media_remedy: 'Convert to JPEG',
             video_remedy: 'Convert the file to MP4',
             size_remedy: 'Compress',
+            counting_note: null,
+        },
+        'zernio:linkedin': {
+            label: 'LinkedIn',
+            network: 'linkedin',
+            via: 'zernio',
+            media_required: false,
+            media_count: 1,
+            fetches_media: true,
+            mime_types: [
+                'image/jpeg',
+                'image/png',
+                'image/gif',
+                'video/mp4',
+                'video/quicktime',
+                'video/x-msvideo',
+            ],
+            max_bytes: 5368709120,
+            max_text: 3000,
+            visible_chars: 200,
+            media_note:
+                'LinkedIn accepts JPEG, PNG or GIF up to 8 MB, or an MP4, MOV or AVI video up to 5 GB.',
+            media_remedy: 'Convert to JPEG',
+            video_remedy: 'Convert the file to MP4',
+            size_remedy: 'Compress',
+            counting_note: null,
+        },
+        'zernio:bluesky': {
+            label: 'Bluesky',
+            network: 'bluesky',
+            via: 'zernio',
+            media_required: false,
+            media_count: 1,
+            fetches_media: true,
+            mime_types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'],
+            max_bytes: 52428800,
+            max_text: 300,
+            visible_chars: 300,
+            media_note: 'Bluesky accepts JPEG, PNG, WebP or GIF up to 1 MB, or an MP4 video up to 50 MB.',
+            media_remedy: 'Convert to JPEG',
+            video_remedy: 'Convert the file to MP4',
+            size_remedy: 'Compress',
+            counting_note: null,
+        },
+        'zernio:twitter': {
+            label: 'X',
+            network: 'twitter',
+            via: 'zernio',
+            media_required: false,
+            media_count: 1,
+            fetches_media: true,
+            mime_types: [
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+                'image/gif',
+                'video/mp4',
+                'video/quicktime',
+            ],
+            max_bytes: 536870912,
+            max_text: 280,
+            visible_chars: 280,
+            media_note:
+                'X accepts JPEG, PNG, WebP or GIF up to 5 MB, or an MP4 or MOV video up to 512 MB.',
+            media_remedy: 'Convert to JPEG',
+            video_remedy: 'Convert the file to MP4',
+            size_remedy: 'Compress',
+            // X counts a URL as 23 characters and an emoji as 2, so the
+            // plugin's own count is wrong for it.
+            counting_note:
+                'X counts a URL as 23 characters whatever its length, and an emoji as 2, so the number of characters in the body is not the number X counts.',
         },
     },
 } satisfies SocialConfig
@@ -126,6 +222,7 @@ export const UNCONFIGURED_CONFIG_PAYLOAD = {
             redirect_uri: 'https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback',
         },
     },
+    aggregators: CONFIG_PAYLOAD.aggregators,
     app_url: 'https://spora.example.com',
     app_url_public: true,
     rules: CONFIG_PAYLOAD.rules,
@@ -137,6 +234,9 @@ export const UNCONFIGURED_CONFIG_PAYLOAD = {
  *
  * A **bare array**, not an envelope. One login per provider: the Meta
  * connection covers an Instagram professional account *and* a Facebook Page.
+ *
+ * The third connection is an **aggregator's**: the slug is its provider, and
+ * the accounts it covers carry the route they publish through.
  */
 export const CONNECTIONS_PAYLOAD = [
     {
@@ -155,6 +255,7 @@ export const CONNECTIONS_PAYLOAD = [
                 id: 12,
                 account_id: 12,
                 platform: 'instagram',
+                via: 'direct',
                 kind: 'business',
                 external_id: '178400991',
                 display_name: 'Fabeat Studio',
@@ -169,6 +270,7 @@ export const CONNECTIONS_PAYLOAD = [
                 id: 13,
                 account_id: 13,
                 platform: 'facebook',
+                via: 'direct',
                 kind: 'page',
                 external_id: '118220094771',
                 display_name: 'Fabeat GmbH',
@@ -198,6 +300,7 @@ export const CONNECTIONS_PAYLOAD = [
                 id: 14,
                 account_id: 14,
                 platform: 'linkedin',
+                via: 'direct',
                 kind: 'member',
                 external_id: 'urn:li:person:4471209',
                 display_name: 'Anna Sommer',
@@ -212,6 +315,37 @@ export const CONNECTIONS_PAYLOAD = [
         ],
         created_at: '2026-06-09T08:12:00+00:00',
         updated_at: '2026-06-09T08:12:00+00:00',
+    },
+    {
+        id: 3,
+        principal_id: 7,
+        provider: 'zernio',
+        business_external_id: null,
+        config_id: null,
+        // A key does not expire.
+        expires_at: null,
+        status: 'active',
+        needs_reconnect: false,
+        scopes: [],
+        accounts: [
+            {
+                id: 15,
+                account_id: 15,
+                platform: 'bluesky',
+                via: 'zernio',
+                kind: 'aggregator',
+                external_id: '66b2a1c0',
+                display_name: 'Fabeat on Bluesky',
+                username: 'fabeat.bsky.social',
+                followers: null,
+                status: 'active',
+                connected_at: '2026-11-03T09:00:00+00:00',
+                can_report: false,
+                report_note: null,
+            },
+        ],
+        created_at: '2026-11-03T09:00:00+00:00',
+        updated_at: '2026-11-03T09:00:00+00:00',
     },
 ] satisfies SocialConnection[]
 
@@ -236,6 +370,10 @@ export const MEDIA_PAYLOAD = [
  * `GET /api/v1/plugins/social/calendar` — `SocialScheduleController::calendar()`.
  *
  * The posts of a month are keyed by `post_id`, and carry both dates.
+ *
+ * The **channels** go along: one entry per target, each naming the channel's
+ * key, the network and the route. Two targets on one channel arrive as two
+ * entries — a target is an account, and a channel is a route to a network.
  */
 export const CALENDAR_PAYLOAD = {
     posts: [
@@ -245,6 +383,10 @@ export const CALENDAR_PAYLOAD = {
             status: 'scheduled',
             scheduled_for: '2026-11-02T09:00:00+00:00',
             published_at: null,
+            channels: [
+                { key: 'direct:linkedin', network: 'linkedin', via: 'direct' },
+                { key: 'zernio:bluesky', network: 'bluesky', via: 'zernio' },
+            ],
         },
     ],
 } satisfies CalendarPayload
@@ -254,8 +396,16 @@ export const CALENDAR_PAYLOAD = {
  * `SocialMetricsService::summary()`.
  *
  * A counter nobody reported stays **null**, in the totals, in the network
- * rows and in the top posts. The series omits a platform's key on a day
- * that platform reported no reach.
+ * rows and in the top posts. The series omits a network's key on a day that
+ * network reported no reach.
+ *
+ * A row is a **channel**: the network and the route to it. The series is
+ * keyed by the channel's key, so the same network on two routes is two
+ * segments.
+ *
+ * The **top posts** are one row per **target**, and each row carries the
+ * target's id: a post on two accounts is two rows, and the id is what tells
+ * them apart.
  */
 export const SUMMARY_PAYLOAD = {
     totals: {
@@ -270,6 +420,8 @@ export const SUMMARY_PAYLOAD = {
     by_network: [
         {
             platform: 'linkedin',
+            channel: 'direct:linkedin',
+            via: 'direct',
             reach: 4820,
             impressions: 9310,
             likes: 20,
@@ -281,6 +433,8 @@ export const SUMMARY_PAYLOAD = {
         },
         {
             platform: 'instagram',
+            channel: 'direct:instagram',
+            via: 'direct',
             // A network that reported no reach: the counters nobody reported
             // are null, not zero.
             reach: null,
@@ -294,14 +448,16 @@ export const SUMMARY_PAYLOAD = {
         },
     ],
     series: [
-        { date: '2026-10-01', linkedin: 120, facebook: 80 },
-        { date: '2026-10-02', linkedin: 240, instagram: 90 },
+        { date: '2026-10-01', 'direct:linkedin': 120, 'direct:facebook': 80 },
+        { date: '2026-10-02', 'direct:linkedin': 240, 'direct:instagram': 90 },
     ],
     top_posts: [
         {
             post_id: 88,
             title: 'Q4 release',
+            target_id: 501,
             platform: 'linkedin',
+            via: 'direct',
             reach: 4820,
             impressions: 9310,
             likes: 12,
@@ -310,7 +466,9 @@ export const SUMMARY_PAYLOAD = {
         {
             post_id: 89,
             title: 'Studio launch',
+            target_id: 502,
             platform: 'instagram',
+            via: 'direct',
             reach: null,
             impressions: null,
             likes: null,
@@ -318,4 +476,142 @@ export const SUMMARY_PAYLOAD = {
         },
     ],
     notes: ['LinkedIn member posts report reactions only — the reach column is empty by design.'],
+} satisfies AnalyticsSummary
+
+/**
+ * The same endpoint for a network reached through **two routes**.
+ *
+ * A LinkedIn member profile published directly and a LinkedIn organisation
+ * page published through the aggregator: one network, two accounts, two
+ * sets of numbers. The rows are per channel, so the network appears twice —
+ * and the series carries a segment for each.
+ *
+ * The **top posts** carry the two target ids, because the post reached two
+ * targets: one row for each, with that target's numbers.
+ */
+export const TWO_ROUTE_SUMMARY_PAYLOAD = {
+    totals: {
+        reach: 140,
+        impressions: 280,
+        likes: 10,
+        comments: 0,
+        shares: 0,
+        saves: 0,
+        clicks: 0,
+    },
+    by_network: [
+        {
+            platform: 'linkedin',
+            channel: 'direct:linkedin',
+            via: 'direct',
+            reach: 100,
+            impressions: 200,
+            likes: 5,
+            comments: 0,
+            shares: 0,
+            saves: 0,
+            clicks: 0,
+            posts: 1,
+        },
+        {
+            platform: 'linkedin',
+            channel: 'zernio:linkedin',
+            via: 'zernio',
+            reach: 40,
+            impressions: 80,
+            likes: 5,
+            comments: 0,
+            shares: 0,
+            saves: 0,
+            clicks: 0,
+            posts: 1,
+        },
+    ],
+    series: [{ date: '2026-10-01', 'direct:linkedin': 100, 'zernio:linkedin': 40 }],
+    top_posts: [
+        {
+            post_id: 88,
+            title: 'Q4 release',
+            target_id: 501,
+            platform: 'linkedin',
+            via: 'direct',
+            reach: 100,
+            impressions: 200,
+            likes: 5,
+            published_at: '2026-11-02T09:00:04+00:00',
+        },
+        {
+            post_id: 88,
+            title: 'Q4 release',
+            target_id: 503,
+            platform: 'linkedin',
+            via: 'zernio',
+            reach: 40,
+            impressions: 80,
+            likes: 5,
+            published_at: '2026-11-02T09:00:04+00:00',
+        },
+    ],
+    notes: [],
+} satisfies AnalyticsSummary
+
+/**
+ * The same endpoint for a post that reached **two accounts of one channel**.
+ *
+ * A LinkedIn member profile and a LinkedIn organisation page: the same post,
+ * the same channel, two targets and two sets of numbers. The backend sends
+ * one row per target, so the post arrives twice — and the two rows are one
+ * post going to two places, not two posts.
+ */
+export const TWO_TARGETS_SUMMARY_PAYLOAD = {
+    totals: {
+        reach: 130,
+        impressions: 260,
+        likes: 7,
+        comments: 0,
+        shares: 0,
+        saves: 0,
+        clicks: 0,
+    },
+    by_network: [
+        {
+            platform: 'linkedin',
+            channel: 'direct:linkedin',
+            via: 'direct',
+            reach: 130,
+            impressions: 260,
+            likes: 7,
+            comments: 0,
+            shares: 0,
+            saves: 0,
+            clicks: 0,
+            posts: 1,
+        },
+    ],
+    series: [{ date: '2026-10-01', 'direct:linkedin': 130 }],
+    top_posts: [
+        {
+            post_id: 88,
+            title: 'Q4 release',
+            target_id: 501,
+            platform: 'linkedin',
+            via: 'direct',
+            reach: 100,
+            impressions: 200,
+            likes: 5,
+            published_at: '2026-11-02T09:00:04+00:00',
+        },
+        {
+            post_id: 88,
+            title: 'Q4 release',
+            target_id: 502,
+            platform: 'linkedin',
+            via: 'direct',
+            reach: 30,
+            impressions: 60,
+            likes: 2,
+            published_at: '2026-11-02T09:00:04+00:00',
+        },
+    ],
+    notes: [],
 } satisfies AnalyticsSummary

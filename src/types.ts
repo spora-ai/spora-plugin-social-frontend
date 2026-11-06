@@ -7,11 +7,31 @@
  * still move.
  */
 
-export type Platform = 'linkedin' | 'facebook' | 'instagram'
+/**
+ * A network, and the route to it.
+ *
+ * The pair is the identity: the same network reached through two routes is
+ * two accounts with two tokens, and each has its own limits.
+ *
+ * **Both axes are plain strings.** Their sets are open — the plugin reaches
+ * three networks on its own and reaches the rest through an aggregator,
+ * whose list grows without the frontend's knowledge — so a `Network` type
+ * would be `string` under a second name, and TypeScript would tell the two
+ * axes apart no better than it does now. The names live in the fields and
+ * in the docblocks.
+ */
+export interface Channel {
+    /** The channel's key — the route, then the network. */
+    key: string
+    /** The network the channel reaches. */
+    network: string
+    /** The route to it — the plugin's own, or an aggregator's. */
+    via: string
+}
 
-export type AccountKind = 'organization' | 'page' | 'member' | 'business'
+export type AccountKind = 'organization' | 'page' | 'member' | 'business' | 'aggregator'
 
-export type AccountStatus = 'active' | 'expired' | 'revoked' | 'error'
+export type AccountStatus = 'active' | 'expired' | 'revoked' | 'error' | 'disconnected'
 
 /**
  * An account a connection covers.
@@ -24,7 +44,10 @@ export interface SocialAccount {
     id: number
     /** The same id under its own name — the backend sends both. */
     account_id: number
-    platform: Platform
+    /** The network the account is on. */
+    platform: string
+    /** The route to it — the plugin's own, or an aggregator's. */
+    via: string
     kind: AccountKind
     external_id: string
     display_name: string
@@ -62,7 +85,17 @@ export type ConnectionStatus = 'active' | 'expired' | 'revoked' | 'error'
 export interface SocialConnection {
     id: number
     principal_id: number
-    provider: Provider
+    /**
+     * The provider the connection belongs to.
+     *
+     * An OAuth provider for a login, an aggregator's slug for a key — and an
+     * aggregator's slug is also the route its accounts publish through.
+     *
+     * A plain string, because the two kinds share one field: the plugin's
+     * own providers are a closed set ({@see Provider}) and an aggregator's
+     * slug is whatever the aggregator calls itself.
+     */
+    provider: string
     /** The portfolio the connection belongs to — Meta's client business id. */
     business_external_id: string | null
     /** Meta's configuration id; null where the platform has none. */
@@ -112,7 +145,10 @@ export interface PostMetrics {
 export interface PostTarget {
     id: number
     account_id: number
-    platform: Platform
+    /** The network the target went to. */
+    platform: string
+    /** The route it went through. */
+    via: string
     status: TargetStatus
     external_id: string | null
     external_url: string | null
@@ -146,7 +182,10 @@ export interface PostMedia {
 
 export interface PostAccountSummary {
     id: number
-    platform: Platform
+    /** The network the account is on. */
+    platform: string
+    /** The route to it. */
+    via: string
     display_name: string
 }
 
@@ -155,12 +194,17 @@ export interface SocialPost {
     principal_id: number
     title: string
     body: string
-    /** A body per platform — the drafts that work for LinkedIn and Facebook differ. */
-    platform_bodies: Partial<Record<Platform, string>>
+    /**
+     * A body per channel — the drafts that work for LinkedIn and Facebook
+     * differ, and so do the two routes to the same network.
+     *
+     * The key is the channel's key: `direct:linkedin`, `zernio:bluesky`.
+     */
+    platform_bodies: Record<string, string>
     /**
      * The tags the post carries, without their hashes.
      *
-     * The hashes are added when the post is composed for a platform, so one
+     * The hashes are added when the post is composed for a channel, so one
      * post carries them once and every network gets them the same.
      */
     hashtags: string[]
@@ -191,7 +235,8 @@ export interface CreatePostPayload {
     principal_id: number
     title: string
     body: string
-    platform_bodies?: Partial<Record<Platform, string>>
+    /** A body per channel, keyed by the channel's key. */
+    platform_bodies?: Record<string, string>
     hashtags?: string[]
     account_ids: number[]
     scheduled_for?: string | null
@@ -212,6 +257,13 @@ export interface CalendarPost {
     status: PostStatus
     scheduled_for: string | null
     published_at: string | null
+    /**
+     * The channels the post goes to — one entry per target.
+     *
+     * Two targets on one channel arrive as two entries, because a target is
+     * an account and a channel is a route to a network.
+     */
+    channels: Channel[]
 }
 
 export interface CalendarPayload {
@@ -236,27 +288,50 @@ export interface AnalyticsTotals {
 }
 
 export interface NetworkTotals extends AnalyticsTotals {
-    platform: Platform
+    /** The network the numbers are about. */
+    platform: string
+    /**
+     * The channel's key — the route, then the network.
+     *
+     * The row is a **channel**, not a network: the same network reached
+     * through two routes is two accounts with two sets of numbers, and the
+     * key is what tells the two rows apart.
+     */
+    channel: string
+    /** The route the numbers came through. */
+    via: string
     posts: number
 }
 
 export interface AnalyticsPoint {
     date: string
     /**
-     * The reach each network reported that day.
+     * The reach each channel reported that day, keyed by the channel's key.
      *
-     * A key is **absent** when that network reported no reach — an absent key
+     * A key is **absent** when that channel reported no reach — an absent key
      * is not a zero, and a day with one missing key must still add up.
      */
-    linkedin?: number
-    facebook?: number
-    instagram?: number
+    [channel: string]: string | number | undefined
 }
 
 export interface TopPost {
     post_id: number
     title: string
-    platform: Platform
+    /**
+     * The target the row is about — **absent when the backend sends no
+     * target id**.
+     *
+     * The backend's rows are one per target, so the id is what tells two
+     * accounts of the same channel on one post apart. It is optional because
+     * **the plugin is released before the frontend**: a released frontend may
+     * run against an older plugin release, and that one sends a row per
+     * reading with no target to name. The frontend folds such a row by the
+     * post, the route and the network instead.
+     */
+    target_id?: number
+    platform: string
+    /** The route the post went out through. */
+    via: string
     /** Null when the network reported no reach for this post. */
     reach: number | null
     /** Null when the network reported no impressions for this post. */
@@ -297,16 +372,21 @@ export interface MediaAssetSummary {
     asset_url: string | null
 }
 
+/** One channel's verdict on an attachment. */
 export interface MediaFitResult {
-    platform: Platform
+    /** The channel's key — the route, then the network. */
+    channel: string
+    network: string
+    via: string
     fits: boolean
     reasons: string[]
     remedy: string | null
+    mime_type: string | null
 }
 
 export interface MediaCheckFit {
     fits: boolean
-    per_platform: MediaFitResult[]
+    per_channel: MediaFitResult[]
 }
 
 export interface MediaPrepareResult {
@@ -361,13 +441,19 @@ export interface ProviderConfig {
 }
 
 /**
- * What one platform accepts.
+ * What one channel accepts.
  *
  * The limits live in the backend — it is what refuses the publish — and they
  * travel with the config, so a badge on an attachment cannot warn about a
  * number the backend no longer enforces.
  */
 export interface PlatformRules {
+    /** The network's own name, as the operator knows it. */
+    label: string
+    /** The network the rule is about. */
+    network: string
+    /** The route to it. */
+    via: string
     /** The network cannot publish a post without media. */
     media_required: boolean
     /** How many attachments a post may carry. */
@@ -392,11 +478,67 @@ export interface PlatformRules {
     video_remedy: string
     /** The remedy for a file that is too large. */
     size_remedy: string
+    /**
+     * The network counts characters its own way, and the plugin cannot
+     * compute that count.
+     *
+     * Null for every network that counts code points. The composer shows the
+     * note where the number would be rather than a number it cannot stand
+     * behind.
+     */
+    counting_note: string | null
 }
+
+/**
+ * What one aggregator is set up for.
+ *
+ * The flag is **the principal's**: the key is the operator's, and it lives
+ * on the connection row.
+ */
+export interface AggregatorConfig {
+    configured: boolean
+    /** The name the operator knows the aggregator by. */
+    label: string
+    needs_setup: string | null
+}
+
+/** What the aggregator's own routes answer with. */
+export interface AggregatorResult {
+    aggregator: string
+    label: string
+    configured: boolean
+    /** The connection the key landed on. */
+    connection_id?: number
+    /** Whether the key is gone. */
+    deleted?: boolean
+    /** What the operation did, in the aggregator's own terms. */
+    message?: string
+}
+
+/** What a sync read back. */
+export interface AggregatorSyncResult {
+    aggregator: string
+    /** The accounts the aggregator reports. */
+    accounts: number
+    /** The accounts it no longer reports. */
+    disconnected: number
+    /** Whether the aggregator's analytics add-on is there. */
+    analytics: boolean
+}
+
+/**
+ * The networks the plugin reaches on its own route.
+ *
+ * The plugin's own OAuth covers these three; everything else it reaches
+ * through an aggregator. The backend's `SocialPlatform` enum is the same
+ * three, and it is what the media preparation endpoint speaks.
+ */
+export type NativeNetwork = 'linkedin' | 'facebook' | 'instagram'
 
 export interface PostQuery {
     status?: string
-    platform?: Platform
+    /** The network to filter by. */
+    platform?: string
     account_id?: number
     limit?: number
     offset?: number
@@ -404,9 +546,17 @@ export interface PostQuery {
 
 export interface SocialConfig {
     providers: Record<Provider, ProviderConfig>
+    /**
+     * The aggregators the plugin can publish through.
+     *
+     * Keyed by the aggregator's slug, which is also the route its accounts
+     * publish through.
+     */
+    aggregators: Record<string, AggregatorConfig>
     app_url: string | null
     app_url_public: boolean
-    rules: Record<Platform, PlatformRules>
+    /** The rules, keyed by the channel's key. */
+    rules: Record<string, PlatformRules>
 }
 
 /**
@@ -433,7 +583,8 @@ export interface ComposerAttachment {
 export interface PostAnalyticsTarget {
     target_id: number
     account_id: number
-    platform: Platform
+    platform: string
+    via: string
     status: TargetStatus
     external_id: string | null
     metrics: PostMetrics | null
@@ -448,4 +599,3 @@ export interface PostAnalytics {
     targets: PostAnalyticsTarget[]
     notes: string[]
 }
-

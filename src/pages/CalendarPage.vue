@@ -42,6 +42,11 @@ async function changeMonth(next: string): Promise<void> {
 
 <template>
     <div data-test="calendar-page">
-        <CalendarGrid :month="month" :posts="posts" @month-change="changeMonth" />
+        <CalendarGrid
+            :month="month"
+            :posts="posts"
+            :config="social.config"
+            @month-change="changeMonth"
+        />
     </div>
 </template>

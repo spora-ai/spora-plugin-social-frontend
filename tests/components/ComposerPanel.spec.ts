@@ -61,9 +61,31 @@ async function mountEditing(post: SocialPost): Promise<Mounted> {
 /** The composer, publishing to an Instagram account, with the given media attached. */
 async function mountWithMedia(
     assets: ReturnType<typeof asset>[],
+    verdict: { fits: boolean; reasons: string[]; remedy: string | null } = {
+        fits: true,
+        reasons: [],
+        remedy: null,
+    },
 ): Promise<Mounted> {
     const openMediaPicker = vi.fn().mockResolvedValue(assets)
-    const mounted = mountComposer(hostContext({ openMediaPicker }))
+    const context = hostContext({ openMediaPicker })
+    // The backend's verdict on the attachment, in the shape it answers with.
+    context.api.post = vi.fn().mockResolvedValue({
+        fits: verdict.fits,
+        per_channel: [
+            {
+                channel: 'direct:instagram',
+                network: 'instagram',
+                via: 'direct',
+                fits: verdict.fits,
+                reasons: verdict.reasons,
+                remedy: verdict.remedy,
+                mime_type: 'image/png',
+            },
+        ],
+    }) as never
+
+    const mounted = mountComposer(context)
     mounted.social.connections = [
         makeConnection({ accounts: [makeAccount({ id: 13, platform: 'instagram' })] }),
     ]
@@ -90,7 +112,7 @@ describe('ComposerPanel — the writing surface', () => {
 
         await compose(wrapper, 'a'.repeat(10))
 
-        expect(wrapper.find('[data-test="preview-linkedin"] .char-count').text()).toBe('10 / 3000')
+        expect(wrapper.find('[data-test="preview-direct:linkedin"] .char-count').text()).toBe('10 / 3000')
     })
 
     it('flags a body past the limit', async () => {
@@ -98,7 +120,71 @@ describe('ComposerPanel — the writing surface', () => {
 
         await compose(wrapper, 'a'.repeat(3001))
 
-        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('Over the limit')
+        expect(wrapper.find('[data-test="preview-direct:linkedin"]').text()).toContain('Over the limit')
+    })
+
+    it('shows the counting note where a number it cannot compute would be', async () => {
+        // X counts a URL as 23 characters and an emoji as 2, so the plugin's
+        // own count is wrong for it — and a wrong number is worse than none.
+        const { wrapper, social } = mountComposer()
+        social.connections = [
+            makeConnection({
+                provider: 'zernio',
+                accounts: [makeAccount({ id: 40, platform: 'twitter', via: 'zernio' })],
+            }),
+        ]
+        await wrapper.vm.$nextTick()
+
+        await wrapper.find('[data-test="target-40"]').setValue(true)
+        await wrapper.find('#cmp-body').setValue('a'.repeat(10))
+        await flushPromises()
+
+        const preview = wrapper.find('[data-test="preview-zernio:twitter"]')
+        expect(preview.find('[data-test="counting-note"]').text()).toContain(
+            'X counts a URL as 23 characters',
+        )
+        // No number, and no verdict on it: the network refuses the post and
+        // its own message lands on the target.
+        expect(preview.find('.char-count').exists()).toBe(false)
+        expect(preview.text()).not.toContain('Over the limit')
+    })
+
+    it('warns that a network is reached through two routes, and lets it go ahead', async () => {
+        // A member profile and an organisation page are two accounts, and
+        // the plugin cannot know they are the same page — posting to both is
+        // sometimes exactly what the operator meant.
+        const { wrapper, social } = mountComposer()
+        social.connections = [
+            makeConnection({
+                accounts: [makeAccount({ id: 12, platform: 'linkedin', via: 'direct' })],
+            }),
+            makeConnection({
+                id: 2,
+                provider: 'zernio',
+                accounts: [makeAccount({ id: 41, platform: 'linkedin', via: 'zernio' })],
+            }),
+        ]
+        await wrapper.vm.$nextTick()
+
+        await wrapper.find('[data-test="target-12"]').setValue(true)
+        await wrapper.find('[data-test="target-41"]').setValue(true)
+        await wrapper.find('#cmp-body').setValue('We shipped…')
+        await flushPromises()
+
+        const warning = wrapper.find('[data-test="two-routes-warning"]')
+        expect(warning.exists()).toBe(true)
+        expect(warning.text()).toContain('LinkedIn')
+        // It is a warning, not a refusal: the post still goes out.
+        expect(wrapper.find('[data-test="composer-submit"]').attributes('disabled')).toBeUndefined()
+    })
+
+    it('says nothing when each network is reached through one route', async () => {
+        const { wrapper } = mountComposer()
+
+        await compose(wrapper)
+        await flushPromises()
+
+        expect(wrapper.find('[data-test="two-routes-warning"]').exists()).toBe(false)
     })
 
     it('counts the accounts the operator picked', async () => {
@@ -115,7 +201,7 @@ describe('ComposerPanel — the writing surface', () => {
         await wrapper.find('[data-test="target-12"]').setValue(true)
         await flushPromises()
 
-        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('No message yet')
+        expect(wrapper.find('[data-test="preview-direct:linkedin"]').text()).toContain('No message yet')
     })
 
     it('will not publish a post with neither a message nor media', async () => {
@@ -180,22 +266,58 @@ describe('ComposerPanel — the media', () => {
     it('says that the network needs media', async () => {
         const { wrapper } = await mountWithMedia([])
 
-        expect(wrapper.find('[data-test="preview-instagram"]').text()).toContain('Media required')
+        expect(wrapper.find('[data-test="preview-direct:instagram"]').text()).toContain('Media required')
+    })
+
+    it('asks the backend whether the media fits the channel', async () => {
+        const { context } = await mountWithMedia([asset('asset-1', 'chart.png', 'image/png')])
+
+        const call = (context.api.post as ReturnType<typeof vi.fn>).mock.calls.find((call) =>
+            String(call[0]).includes('check-fit'),
+        )
+
+        expect(call?.[1]).toMatchObject({
+            principal_id: 7,
+            media_asset_id: 'asset-1',
+            channels: ['direct:instagram'],
+        })
     })
 
     it('says that the media does not fit the network', async () => {
-        // Instagram takes JPEG or MP4; the picker handed back a PNG.
-        const { wrapper } = await mountWithMedia([asset('asset-1', 'chart.png', 'image/png')])
+        // Instagram takes JPEG or MP4, and a MOV is neither.
+        const { wrapper } = await mountWithMedia(
+            [asset('asset-1', 'clip.mov', 'video/quicktime')],
+            {
+                fits: false,
+                reasons: ['Instagram does not accept video/quicktime.'],
+                remedy: 'Convert the file to MP4',
+            },
+        )
 
-        expect(wrapper.find('[data-test="preview-instagram"]').text()).toContain(
+        expect(wrapper.find('[data-test="preview-direct:instagram"]').text()).toContain(
             'The media does not fit this network',
         )
+        // And the badge names what is wrong, in the backend's words.
+        expect(wrapper.find('[data-test="media-fit-asset-1-direct:instagram"]').text()).toContain(
+            'Instagram does not accept video/quicktime.',
+        )
+    })
+
+    it('says nothing about a file the backend converts on the way out', async () => {
+        // Instagram takes no PNG — and the pipeline converts one first, so
+        // the post goes out. A fit computed here would warn about it.
+        const { wrapper } = await mountWithMedia([asset('asset-1', 'chart.png', 'image/png')])
+
+        expect(wrapper.find('[data-test="preview-direct:instagram"]').text()).not.toContain(
+            'The media does not fit this network',
+        )
+        expect(wrapper.find('[data-test="media-fit-asset-1-direct:instagram"]').exists()).toBe(false)
     })
 
     it('says that the network fetches the media itself', async () => {
         const { wrapper } = await mountWithMedia([asset('asset-1', 'chart.jpg', 'image/jpeg')])
 
-        expect(wrapper.find('[data-test="preview-instagram"]').text()).toContain('Public URL')
+        expect(wrapper.find('[data-test="preview-direct:instagram"]').text()).toContain('Public URL')
     })
 
     it('says how many media the network takes', async () => {
@@ -204,7 +326,7 @@ describe('ComposerPanel — the media', () => {
             asset('asset-2', 'two.jpg', 'image/jpeg'),
         ])
 
-        expect(wrapper.find('[data-test="preview-instagram"]').text()).toContain('1 media max')
+        expect(wrapper.find('[data-test="preview-direct:instagram"]').text()).toContain('1 media max')
     })
 })
 
@@ -597,28 +719,28 @@ describe('ComposerPanel — one body, and a network’s own only where it differ
         await writeShared(wrapper)
 
         expect(wrapper.find('[data-test="message-label"]').text()).toBe('Shared message')
-        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('We shipped…')
-        expect(wrapper.find('[data-test="preview-facebook"]').text()).toContain('We shipped…')
+        expect(wrapper.find('[data-test="preview-direct:linkedin"]').text()).toContain('We shipped…')
+        expect(wrapper.find('[data-test="preview-direct:facebook"]').text()).toContain('We shipped…')
     })
 
     it('gives a network a text of its own, and leaves the others the shared one', async () => {
         const { wrapper } = mountTwoNetworks()
         await writeShared(wrapper)
 
-        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-own-text-direct:linkedin"]').trigger('click')
         await flushPromises()
         await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
         await flushPromises()
 
-        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('The LinkedIn wording.')
-        expect(wrapper.find('[data-test="preview-facebook"]').text()).toContain('We shipped…')
+        expect(wrapper.find('[data-test="preview-direct:linkedin"]').text()).toContain('The LinkedIn wording.')
+        expect(wrapper.find('[data-test="preview-direct:facebook"]').text()).toContain('We shipped…')
     })
 
     it('names the network whose own text the box edits', async () => {
         const { wrapper } = mountTwoNetworks()
         await writeShared(wrapper)
 
-        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-own-text-direct:linkedin"]').trigger('click')
         await flushPromises()
 
         expect(wrapper.find('[data-test="message-label"]').text()).toBe('Message for LinkedIn')
@@ -630,7 +752,7 @@ describe('ComposerPanel — one body, and a network’s own only where it differ
         const { wrapper } = mountTwoNetworks()
         await writeShared(wrapper)
 
-        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-own-text-direct:linkedin"]').trigger('click')
         await flushPromises()
         await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
         await flushPromises()
@@ -639,23 +761,23 @@ describe('ComposerPanel — one body, and a network’s own only where it differ
 
         expect(wrapper.find('[data-test="message-label"]').text()).toBe('Shared message')
         expect((wrapper.find('#cmp-body').element as HTMLTextAreaElement).value).toBe('We shipped…')
-        expect(wrapper.find('[data-test="platform-edit-linkedin"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="platform-edit-direct:linkedin"]').exists()).toBe(true)
     })
 
     it('drops the network’s own text and goes back to the shared message', async () => {
         const { wrapper } = mountTwoNetworks()
         await writeShared(wrapper)
 
-        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-own-text-direct:linkedin"]').trigger('click')
         await flushPromises()
         await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
         await flushPromises()
-        await wrapper.find('[data-test="platform-use-shared-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-use-shared-direct:linkedin"]').trigger('click')
         await flushPromises()
 
-        expect(wrapper.find('[data-test="platform-own-text-linkedin"]').exists()).toBe(true)
-        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('We shipped…')
-        expect(wrapper.find('[data-test="preview-linkedin"]').text()).not.toContain('The LinkedIn wording.')
+        expect(wrapper.find('[data-test="platform-own-text-direct:linkedin"]').exists()).toBe(true)
+        expect(wrapper.find('[data-test="preview-direct:linkedin"]').text()).toContain('We shipped…')
+        expect(wrapper.find('[data-test="preview-direct:linkedin"]').text()).not.toContain('The LinkedIn wording.')
     })
 
     it('sends the network’s own text with the post', async () => {
@@ -664,7 +786,7 @@ describe('ComposerPanel — one body, and a network’s own only where it differ
         context.api.post = post as never
         await writeShared(wrapper)
 
-        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-own-text-direct:linkedin"]').trigger('click')
         await flushPromises()
         await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
         await flushPromises()
@@ -675,7 +797,7 @@ describe('ComposerPanel — one body, and a network’s own only where it differ
             '/plugins/social/posts',
             expect.objectContaining({
                 body: 'We shipped…',
-                platform_bodies: { linkedin: 'The LinkedIn wording.' },
+                platform_bodies: { 'direct:linkedin': 'The LinkedIn wording.' },
             }),
         )
     })
@@ -685,7 +807,7 @@ describe('ComposerPanel — one body, and a network’s own only where it differ
 
         await wrapper.find('[data-test="target-12"]').setValue(true)
         await flushPromises()
-        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-own-text-direct:linkedin"]').trigger('click')
         await flushPromises()
         await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
         await flushPromises()
@@ -698,14 +820,14 @@ describe('ComposerPanel — one body, and a network’s own only where it differ
         const { wrapper } = mountTwoNetworks()
         await writeShared(wrapper)
 
-        await wrapper.find('[data-test="platform-own-text-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-own-text-direct:linkedin"]').trigger('click')
         await flushPromises()
         await wrapper.find('#cmp-body').setValue('The LinkedIn wording.')
         await flushPromises()
         await wrapper.find('[data-test="back-to-shared"]').trigger('click')
         await flushPromises()
 
-        await wrapper.find('[data-test="platform-edit-linkedin"]').trigger('click')
+        await wrapper.find('[data-test="platform-edit-direct:linkedin"]').trigger('click')
         await flushPromises()
 
         expect(wrapper.find('[data-test="message-label"]').text()).toBe('Message for LinkedIn')
@@ -743,7 +865,7 @@ describe('ComposerPanel — the hashtags', () => {
         await flushPromises()
 
         // The composed text is the body, a blank line and the tag.
-        expect(wrapper.find('[data-test="preview-linkedin"] .char-count').text()).toBe('16 / 3000')
+        expect(wrapper.find('[data-test="preview-direct:linkedin"] .char-count').text()).toBe('16 / 3000')
     })
 
     it('shows the tags in the preview, where the counter is', async () => {
@@ -753,7 +875,7 @@ describe('ComposerPanel — the hashtags', () => {
         await wrapper.find('[data-test="hashtags-input"]').setValue('#one #two')
         await flushPromises()
 
-        const preview = wrapper.find('[data-test="preview-linkedin"]')
+        const preview = wrapper.find('[data-test="preview-direct:linkedin"]')
         expect(preview.find('[data-test="preview-hashtags"]').text()).toBe('#one #two')
     })
 
@@ -766,7 +888,7 @@ describe('ComposerPanel — the hashtags', () => {
         // The number is the backend's; the wording around it is the
         // composer's, so there is one rule and one sentence.
         expect(
-            wrapper.find('[data-test="preview-linkedin"] [data-test="visible-chars"]').text(),
+            wrapper.find('[data-test="preview-direct:linkedin"] [data-test="visible-chars"]').text(),
         ).toBe('Only the first ~200 characters show.')
     })
 })
@@ -801,9 +923,9 @@ describe('ComposerPanel — editing a post', () => {
                 status: 'draft',
                 title: 'Q4 release',
                 body: 'We shipped…',
-                platform_bodies: { linkedin: 'The LinkedIn wording.' },
+                platform_bodies: { 'direct:linkedin': 'The LinkedIn wording.' },
                 hashtags: ['one', 'two'],
-                accounts: [{ id: 12, platform: 'linkedin', display_name: 'Fabeat GmbH' }],
+                accounts: [{ id: 12, platform: 'linkedin', via: 'direct', display_name: 'Fabeat GmbH' }],
             }),
         )
 
@@ -812,7 +934,7 @@ describe('ComposerPanel — editing a post', () => {
         expect((wrapper.find('#cmp-hashtags').element as HTMLInputElement).value).toBe('#one #two')
         expect(wrapper.find('[data-test="target-summary"]').text()).toBe('1 accounts selected')
         // The network's own text is what that network publishes.
-        expect(wrapper.find('[data-test="preview-linkedin"]').text()).toContain('The LinkedIn wording.')
+        expect(wrapper.find('[data-test="preview-direct:linkedin"]').text()).toContain('The LinkedIn wording.')
     })
 
     it('carries the attachments of the post', async () => {

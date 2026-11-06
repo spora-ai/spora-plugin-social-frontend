@@ -19,7 +19,7 @@ import { RefreshCw } from 'lucide-vue-next'
 import ConnectionsGrid from '../components/ConnectionsGrid.vue'
 import ProviderSetupOverlay from '../components/ProviderSetupOverlay.vue'
 import { useSocialStore } from '../stores/social'
-import { needsAttention, providerLabel } from '../lib/providers'
+import { isNativeProvider, needsAttention, providerLabel } from '../lib/providers'
 import type { Provider, SocialConnection } from '../types'
 
 const { t } = useI18n()
@@ -52,13 +52,24 @@ const guideRedirectUri = computed(() => {
 
 onMounted(async () => {
     if (principalId.value === null) return
-    await Promise.all([social.loadConnections(principalId.value), social.loadConfig()])
+    await Promise.all([social.loadConnections(principalId.value), social.loadConfig(principalId.value)])
 })
 
 watch(principalId, async (next, prev) => {
     if (next === null || next === prev) return
     await social.loadConnections(next)
 })
+
+/**
+ * The connection's name — the login's, or the aggregator's own.
+ *
+ * The aggregator's name comes from the backend: the operator knows it as a
+ * product, and *aggregator* is our word, not theirs.
+ */
+function connectionLabel(connection: SocialConnection): string {
+    if (isNativeProvider(connection.provider)) return providerLabel(connection.provider)
+    return social.config?.aggregators[connection.provider]?.label ?? connection.provider
+}
 
 /**
  * Start the OAuth round trip.
@@ -97,9 +108,52 @@ async function disconnect(connection: SocialConnection): Promise<void> {
  * operator looking for one.
  */
 async function openGuide(provider: Provider): Promise<void> {
-    await social.loadConfig()
+    if (principalId.value === null) return
+
+    await social.loadConfig(principalId.value)
 
     guideProvider.value = provider
+}
+
+/**
+ * Store the aggregator's key.
+ *
+ * The key is written here and nowhere else: the agent's tools have no way to
+ * write a credential, because a credential belongs where a person can see
+ * it, replace it and revoke it.
+ */
+async function addAggregator(aggregator: string, apiKey: string): Promise<void> {
+    if (principalId.value === null) return
+
+    const result = await social.setAggregatorKey(principalId.value, aggregator, apiKey)
+    if (result === null) return
+
+    social.setNotice(t('The key is saved.'))
+}
+
+/**
+ * Forget the aggregator's key.
+ *
+ * The accounts stay in the aggregator — they are its accounts, and the
+ * operator removes them there.
+ */
+async function forgetAggregator(aggregator: string): Promise<void> {
+    if (principalId.value === null) return
+
+    const result = await social.forgetAggregator(principalId.value, aggregator)
+    if (result === null) return
+
+    social.setNotice(
+        t('The key is forgotten. The accounts stay in {aggregator} — remove them there if you do not want them published to any more.', {
+            aggregator: social.config?.aggregators[aggregator]?.label ?? aggregator,
+        }),
+    )
+}
+
+/** The aggregator's accounts, read again. */
+async function syncAggregator(aggregator: string): Promise<void> {
+    if (principalId.value === null) return
+    await social.syncAggregator(principalId.value, aggregator)
 }
 </script>
 
@@ -112,6 +166,9 @@ async function openGuide(provider: Provider): Promise<void> {
             @refresh="refresh"
             @disconnect="disconnect"
             @guide="openGuide"
+            @add-aggregator="addAggregator"
+            @forget-aggregator="forgetAggregator"
+            @sync-aggregator="syncAggregator"
         />
 
         <ProviderSetupOverlay
@@ -135,9 +192,10 @@ async function openGuide(provider: Provider): Promise<void> {
                 >
                     <div class="flex items-center gap-2">
                         <span class="min-w-0 flex-1 truncate text-sm font-medium">
-                            {{ providerLabel(connection.provider) }}
+                            {{ connectionLabel(connection) }}
                         </span>
                         <button
+                            v-if="isNativeProvider(connection.provider)"
                             type="button"
                             class="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
                             :data-test="`connection-reconnect-${connection.id}`"
@@ -146,9 +204,23 @@ async function openGuide(provider: Provider): Promise<void> {
                             <RefreshCw class="h-3 w-3" />
                             {{ t('Reconnect') }}
                         </button>
+                        <button
+                            v-else
+                            type="button"
+                            class="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-medium transition-colors hover:bg-muted"
+                            :data-test="`connection-sync-${connection.id}`"
+                            @click="syncAggregator(connection.provider)"
+                        >
+                            <RefreshCw class="h-3 w-3" />
+                            {{ t('Sync now') }}
+                        </button>
                     </div>
                     <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                        {{ t('This connection will not publish until it is renewed.') }}
+                        {{
+                            isNativeProvider(connection.provider)
+                                ? t('This connection will not publish until it is renewed.')
+                                : t('This connection will not publish until the key is replaced.')
+                        }}
                     </p>
                 </div>
             </div>

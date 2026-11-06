@@ -3,17 +3,18 @@ import { flushPromises } from '@vue/test-utils'
 import PostsTable from '../../src/components/PostsTable.vue'
 import { makeMedia, makeMetrics, makePost, makeTarget } from '../fixtures'
 import { mountComponent, stubRoutes } from '../mountPage'
+import { CONFIG_PAYLOAD } from '../recorded'
 
 describe('PostsTable', () => {
     it('shows the reach of a measured post', () => {
-        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7, config: CONFIG_PAYLOAD })
 
         // The reach column is the number the operator scans for.
         expect(wrapper.find('tbody').text()).toContain('4,820')
     })
 
     it('shows the engagement rate next to it', () => {
-        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7, config: CONFIG_PAYLOAD })
         expect(wrapper.find('tbody').text()).toContain('engagement')
     })
 
@@ -24,6 +25,7 @@ describe('PostsTable', () => {
                     id: 501,
                     account_id: 12,
                     platform: 'linkedin',
+                    via: 'direct',
                     status: 'pending',
                     external_id: null,
                     external_url: null,
@@ -33,7 +35,7 @@ describe('PostsTable', () => {
                 },
             ],
         })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
 
         // A zero would read as "nobody saw it", which is a different claim
         // from "nothing has been measured".
@@ -41,18 +43,32 @@ describe('PostsTable', () => {
     })
 
     it('says that the reach is a rough figure', () => {
-        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7, config: CONFIG_PAYLOAD })
         expect(wrapper.text()).toContain('a rough figure')
     })
 
-    it('names the platforms a post went to', () => {
-        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7 })
-        expect(wrapper.find('[data-platform="linkedin"]').exists()).toBe(true)
+    it('names the networks a post went to', () => {
+        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7, config: CONFIG_PAYLOAD })
+
+        expect(wrapper.find('[data-network="linkedin"]').exists()).toBe(true)
+        // The name comes from the backend's rules, not from a copy here.
+        expect(wrapper.find('[data-network="linkedin"]').text()).toBe('LinkedIn')
+    })
+
+    it('carries the route beside the network', () => {
+        // The route is on the row, so a target is never read as a plain
+        // network that could have come from anywhere.
+        const post = makePost({
+            targets: [makeTarget({ id: 501, platform: 'linkedin', via: 'direct' })],
+        })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
+
+        expect(wrapper.find('[data-test="post-route-direct:linkedin"]').text()).toBe('Direct')
     })
 
     it('warns that a post without an account cannot go out', () => {
         const post = makePost({ status: 'draft', accounts: [], targets: [] })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
 
         // A draft may be written before any account is connected. It has no
         // platform to go to, and the row says so rather than showing an
@@ -69,6 +85,7 @@ describe('PostsTable', () => {
                     id: 501,
                     account_id: 12,
                     platform: 'linkedin',
+                    via: 'direct',
                     status: 'published',
                     external_id: 'urn:li:share:9',
                     external_url: null,
@@ -80,6 +97,7 @@ describe('PostsTable', () => {
                     id: 502,
                     account_id: 13,
                     platform: 'instagram',
+                    via: 'direct',
                     status: 'failed',
                     external_id: null,
                     external_url: null,
@@ -89,14 +107,14 @@ describe('PostsTable', () => {
                 },
             ],
         })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
 
         expect(wrapper.find('tbody').text()).toContain('1 target failed')
     })
 
     it('shows a thumbnail when the post has an image', () => {
         const post = makePost({ media: [makeMedia({ media_asset_id: 'asset-1' })] })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
 
         const image = wrapper.find('[data-test="post-image-asset-1"]')
         expect(image.exists()).toBe(true)
@@ -107,7 +125,7 @@ describe('PostsTable', () => {
 
     it('renders exactly as before when the post has no image', () => {
         const post = makePost({ media: [] })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
         const row = wrapper.find('[data-test="post-row-88"]')
 
         // No thumbnail, and no placeholder box left behind in its place.
@@ -118,7 +136,7 @@ describe('PostsTable', () => {
 
     it('shows no thumbnail when the image’s asset is gone', () => {
         const post = makePost({ media: [makeMedia({ media_asset_id: 'asset-1', asset_url: null })] })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
         const row = wrapper.find('[data-test="post-row-88"]')
 
         // A row with a dead asset reads as it did before the thumbnail existed,
@@ -136,7 +154,7 @@ describe('PostsTable', () => {
                 makeMedia({ media_asset_id: 'asset-2', position: 1 }),
             ],
         })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
         const row = wrapper.find('[data-test="post-row-88"]')
 
         expect(row.find('[data-test="post-image-asset-1"]').exists()).toBe(true)
@@ -149,7 +167,7 @@ describe('PostsTable', () => {
         const post = makePost({
             targets: [makeTarget({ metrics: makeMetrics({ reach: null, impressions: null }) })],
         })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
 
         expect(wrapper.find('[data-test="post-reach-88"]').text()).toBe('—')
         expect(wrapper.find('[data-test="post-rate-88"]').text()).toBe('—')
@@ -159,7 +177,7 @@ describe('PostsTable', () => {
         const post = makePost({
             targets: [makeTarget({ metrics: makeMetrics({ reach: 0, impressions: 0 }) })],
         })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
 
         expect(wrapper.find('[data-test="post-reach-88"]').text()).toBe('0')
         // A counted zero is still no rate: 0/0 is not a rate.
@@ -167,7 +185,7 @@ describe('PostsTable', () => {
     })
 
     it('shows the reach and the rate of a measured post', () => {
-        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [makePost()], principalId: 7, config: CONFIG_PAYLOAD })
 
         expect(wrapper.find('[data-test="post-reach-88"]').text()).toBe('4,820')
         expect(wrapper.find('[data-test="post-rate-88"]').text()).toContain('engagement')
@@ -182,15 +200,15 @@ describe('PostsTable', () => {
             scheduled_for: null,
             published_at: '2026-11-02T09:00:04+00:00',
         })
-        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7 })
+        const wrapper = mountComponent(PostsTable, { posts: [post], principalId: 7, config: CONFIG_PAYLOAD })
 
         const row = wrapper.find('[data-test="post-row-88"]')
         expect(row.text()).not.toContain('—')
     })
 
     it('tells an agent-written post from a manual one', () => {
-        const manual = mountComponent(PostsTable, { posts: [makePost({ source: 'manual' })], principalId: 7 })
-        const agent = mountComponent(PostsTable, { posts: [makePost({ source: 'ai' })], principalId: 7 })
+        const manual = mountComponent(PostsTable, { posts: [makePost({ source: 'manual' })], principalId: 7, config: CONFIG_PAYLOAD })
+        const agent = mountComponent(PostsTable, { posts: [makePost({ source: 'ai' })], principalId: 7, config: CONFIG_PAYLOAD })
 
         expect(manual.find('[data-test="post-row-88"]').text()).toContain('Manual')
         expect(agent.find('[data-test="post-row-88"]').text()).toContain('By an agent')
@@ -203,6 +221,7 @@ describe('PostsTable', () => {
                 makePost({ source: 'ai', status: 'scheduled', scheduled_for: '2026-11-09T09:00:00+00:00' }),
             ],
             principalId: 7,
+            config: CONFIG_PAYLOAD,
         })
 
         expect(wrapper.find('[data-test="post-agent-hint-88"]').text()).toContain(
@@ -214,6 +233,7 @@ describe('PostsTable', () => {
         const wrapper = mountComponent(PostsTable, {
             posts: [makePost({ source: 'ai', status: 'published' })],
             principalId: 7,
+            config: CONFIG_PAYLOAD,
         })
 
         expect(wrapper.find('[data-test="post-agent-hint-88"]').exists()).toBe(false)
@@ -226,7 +246,7 @@ describe('PostsTable — opening a post', () => {
         const router = stubRoutes()
         const wrapper = mountComponent(
             PostsTable,
-            { posts: [makePost()], principalId: 7 },
+            { posts: [makePost()], principalId: 7, config: CONFIG_PAYLOAD },
             { router },
         )
         return { wrapper, router }

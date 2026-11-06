@@ -101,9 +101,12 @@ onMounted(async () => {
     // and the address bar name the same screen.
     await announceConnected()
     // The rules every screen reads travel with the config, and the composer
-    // needs them before it can count a body.
-    await social.loadConfig()
-    if (principalId.value !== null) await social.loadConnections(principalId.value)
+    // needs them before it can count a body. The config names the principal:
+    // the aggregators' flags are the operator's.
+    if (principalId.value !== null) {
+        await social.loadConfig(principalId.value)
+        await social.loadConnections(principalId.value)
+    }
 })
 
 // A host navigation can land on a principal the store is not on yet; the `replace` mirrors back
@@ -113,10 +116,13 @@ watch(pathPrincipalId, () => {
     void reconcilePrincipal()
 })
 
-// The accounts belong to the principal, so a scope change re-reads them.
+// The accounts belong to the principal, so a scope change re-reads them —
+// and the config with them, because the aggregators' flags are the
+// principal's.
 watch(principalId, (next, prev) => {
     if (next === null || next === prev) return
     void social.loadConnections(next)
+    void social.loadConfig(next)
 })
 
 /**

@@ -16,10 +16,12 @@ The build is a Vite **library** build in IIFE format: `npm run build` writes `fr
 
 Four screens, behind a rail, with the principal switcher at the top of the rail:
 
-- **Compose** — the landing screen. The composer with per-platform character counters, the target account picker, the media strip and the publish/schedule controls, plus the "up next" queue and the accounts that need attention. The schedule control is the one-shot path and is unchanged by the cut of the static slot.
-- **Calendar** — the month grid, with the month's posts on the day they go out.
+- **Compose** — the landing screen. The composer with per-channel character counters, the target account picker, the media strip and the publish/schedule controls, plus the "up next" queue and the accounts that need attention. The schedule control is the one-shot path and is unchanged by the cut of the static slot.
+- **Calendar** — the month grid, with the month's posts on the day they go out and a chip for each channel a post goes to.
 - **Posts** — the post list, with the reach column, and — behind a segmented control — **Analytics**, which is a *route* (`/apps/social/p/{pid}/posts/analytics`), not a flag. A post the agent wrote says so, and a scheduled one says that the agent will publish it.
-- **Accounts** — the **connections**, one card per login. A provider is a login, not a network: one Meta login publishes as an Instagram professional account *and* as a Facebook Page, under one token — so the card names the provider, carries the token's health, and lists the accounts it covers with their platform badges and their report notes. A provider with no connection gets a **Connect Meta** / **Connect LinkedIn** button; a provider that is not configured yet also says what to add and where — the app id, the secret and the configuration id live in **Settings → Plugins**, and so does the redirect URI to register with the platform.
+- **Accounts** — the **connections**, one card per login. A provider is a login, not a network: one Meta login publishes as an Instagram professional account *and* as a Facebook Page, under one token — so the card names the provider, carries the token's health, and lists the accounts it covers with their network badges and their report notes. A provider with no connection gets a **Connect Meta** / **Connect LinkedIn** button; a provider that is not configured yet also says what to add and where — the app id, the secret and the configuration id live in **Settings → Plugins**, and so does the redirect URI to register with the platform.
+
+  Below the providers, one quiet line — **Add Zernio** — opens a panel that says what the aggregator is and takes its API key. Once it is connected, the aggregator's card sits *after* the native cards, carries an **"Aggregator"** chip so it is never mistaken for a login, and offers **Sync now** and **Forget this key** instead of *Refresh token* and *Disconnect*. An operator who only wants LinkedIn and Facebook never sees it again.
 
 There is **no Recurring tab**. The static slot — a fixed slot that posted the same words every week — was cut: its template only knew date and time variables, and LinkedIn and Meta ship native scheduled posts anyway. The agent-driven mode replaced it: core's scheduler wakes an agent, the agent drafts the copy, and the post it creates is a scheduled post like any other — so the recurrence itself lives in the agent's own Schedules tab.
 
@@ -76,11 +78,12 @@ npm run i18n:check     # the CI gate: en.json drift, a locale's key set, untrans
 
 ### What stays English, and why
 
-Three kinds of string are deliberately not in the catalogue:
+Four kinds of string are deliberately not in the catalogue:
 
-- **The networks' names** — "LinkedIn", "Facebook", "Instagram". They are the platforms' brand, they read the same in every language, and an invented translation would break the link between a chip and the account it names.
+- **The networks' names** — "LinkedIn", "Facebook", "Instagram". They are the platforms' brand, they read the same in every language, and an invented translation would break the link between a chip and the account it names. The names come with the rules in `/config`; the three the plugin reaches on its own route are the fallback for the moment before the config has arrived.
 - **`Principal` / `Principals`** — the house term. The host's own German catalogue keeps it untranslated ("Ziel-Principal", "einen anderen Principal"), so a German operator reads "Principal" here too, and translating it would put two words for one concept on the same screen.
 - **`Spora`** — the house's own name.
+- **`Aggregator`** — the house term for the thing that reaches the networks the plugin does not reach itself. It is our word, the way "Principal" is ours, and the host's own German catalogue keeps such words untranslated.
 
 These are the extractor's `EXCLUDED_TERMS` — it leaves them in the template as raw text instead of reporting them as untranslated copy.
 
@@ -90,17 +93,21 @@ These are the extractor's `EXCLUDED_TERMS` — it leaves them in the template as
 
 ## Connections, not platforms
 
-The plugin holds **one OAuth connection per provider**, not one per platform. A Meta connection covers an Instagram professional account *and* a Facebook Page under one token; a LinkedIn connection covers a member and the organisations they administer.
+The plugin holds **one OAuth connection per provider**, not one per network. A Meta connection covers an Instagram professional account *and* a Facebook Page under one token; a LinkedIn connection covers a member and the organisations they administer.
 
-So the Accounts screen shows connections: the token's expiry, its status and the "needs reconnect" flag belong to the connection, and each account carries only what is its own — its platform, its name, its audience and the note that says whether it can report numbers at all. The composer's picker still picks **accounts**, so they are flattened out of their connections where it needs them.
+So the Accounts screen shows connections: the token's expiry, its status and the "needs reconnect" flag belong to the connection, and each account carries only what is its own — its network, the route to it, its name, its audience and the note that says whether it can report numbers at all. The composer's picker still picks **accounts**, so they are flattened out of their connections where it needs them.
 
-The platform **limits** are the backend's: `/config` carries them, because the backend is what refuses the publish. The frontend keeps no copy of them.
+**A channel is a network and the route to it.** `direct:linkedin` is the plugin's own OAuth and LinkedIn's own API; `zernio:bluesky` is the aggregator, reaching a network Spora does not talk to natively. The same network on two routes is two accounts with two tokens and two sets of limits — so the channel's key is the route and then the network, and the rules, the per-channel bodies and the per-channel analytics rows are all keyed by it. The route is named wherever a network is named, because a row that says only "linkedin" says nothing about which of the two it is.
+
+The **top posts** are keyed by their **target**, not by their channel: the backend sends one row per target, and a post that reached two accounts of one channel is two rows with two sets of numbers. The view groups them under one title, so the operator reads one post that went to two places — not two posts. A backend that sends no target id (the plugin is released before the frontend) sends one row per reading instead, and those are folded by the post, the route and the network.
+
+The **limits** are the backend's: `/config` carries them, keyed by the channel, because the backend is what refuses the publish. The frontend keeps no copy of them — and neither does it keep a copy of the networks' names, which arrive with the rules.
 
 ## The media
 
 The composer opens the **host's** media picker: `host.openMediaPicker({ multi: true, mediaKind: 'image' })`. The plugin ships no upload dialog of its own — the host's picker lists the Media Archive *and* uploads, and its two-step shape is kept: a tile click chooses, the Attach button commits.
 
-Each attachment carries its fit state **for the platforms currently targeted**, with the remedy named ("Convert to JPEG"), because the operator can act on that and not on a platform's error text.
+Each attachment carries its fit state **for the channels currently targeted**, with the remedy named ("Convert to JPEG"), because the operator can act on that and not on a network's error text. The verdict is the backend's: it judges the media as the network receives it — Instagram takes no PNG, and the pipeline converts one before the post goes out — so a fit computed in the frontend would warn about a post that goes out.
 
 ## Mount contract
 

@@ -15,7 +15,8 @@ import { useSocialStore } from '../stores/social'
 import { formatWhen } from '../lib/format'
 import { needsAttention, providerLabel } from '../lib/providers'
 import { postPath } from '../lib/paths'
-import type { Platform } from '../types'
+import { brandColorVar, networkLabel } from '../lib/platforms'
+import { postChannels } from '../lib/metrics'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -85,12 +86,13 @@ watch(principalId, async (next, prev) => {
                         >
                             <div class="flex flex-wrap items-center gap-1">
                                 <span
-                                    v-for="platform in post.targets.map((target) => target.platform).filter((value, index, all) => all.indexOf(value) === index)"
-                                    :key="platform"
+                                    v-for="channel in postChannels(post)"
+                                    :key="channel.key"
                                     class="platform-chip"
-                                    :data-platform="platform as Platform"
+                                    :data-network="channel.network"
+                                    :style="{ '--network-color': brandColorVar(channel.network) }"
                                 >
-                                    {{ platform }}
+                                    {{ networkLabel(channel.network, social.rules) }}
                                 </span>
                             </div>
                             <div class="mt-1.5 truncate text-sm font-medium">{{ post.title }}</div>

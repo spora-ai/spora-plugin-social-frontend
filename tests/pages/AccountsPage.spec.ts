@@ -286,8 +286,33 @@ describe('AccountsPage', () => {
         )
     })
 
-    it('closes the setup guide again', async () => {
+    it('never asks for principal zero', async () => {
         const pinia = createPinia()
+
+        const router = makeRouter()
+        await router.push('/p/7/accounts')
+        await router.isReady()
+
+        const context = contextWith(CONFIG_PAYLOAD, META_ONLY)
+        const wrapper = mountPage(AccountsPage, pinia, router, context)
+        await flushPromises()
+
+        // A URL with no usable principal: there is nobody to act for, and
+        // the backend refuses principal zero outright.
+        await router.push('/p/0/accounts')
+        await flushPromises()
+
+        await wrapper.find('[data-test="setup-guide-linkedin"]').trigger('click')
+        await flushPromises()
+
+        const asked = (context.api.get as ReturnType<typeof vi.fn>).mock.calls.map(
+            (call) => call[1] as { principal_id?: number } | undefined,
+        )
+
+        expect(asked.some((query) => query?.principal_id === 0)).toBe(false)
+    })
+
+    it('closes the setup guide again', async () => {        const pinia = createPinia()
 
         const router = makeRouter()
         await router.push('/p/7/accounts')
