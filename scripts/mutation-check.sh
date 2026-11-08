@@ -5,11 +5,11 @@ set -u
 cd "$(dirname "$0")/.."
 
 BACKUP=$(mktemp -d)
-cp -R src tests "$BACKUP/"
+cp -R src tests scripts "$BACKUP/"
 
 restore() {
-    rm -rf src tests
-    cp -R "$BACKUP/src" "$BACKUP/tests" .
+    rm -rf src tests scripts
+    cp -R "$BACKUP/src" "$BACKUP/tests" "$BACKUP/scripts" .
 }
 
 replace() {
@@ -89,9 +89,64 @@ check "media fit badge" src/components/MediaStrip.vue \
 
 # 8. The chart series use the chart tokens, not the brand hues.
 check "chart series colours" src/components/AnalyticsView.vue \
-  'background: `hsl(${chartColorVar(platform)})`,' \
-  'background: `hsl(${brandColorVar(platform)})`,' \
+  'background: chartColorVar(channelFromKey(channel)),' \
+  'background: brandColorVar(channelFromKey(channel)),' \
   tests/components/AnalyticsView.spec.ts
+
+# 64. The analytics rows are keyed by the channel. Two rows with one key are
+# one row patched twice, and the row that was first would wear the other's
+# numbers.
+check "the analytics row is keyed by the channel" src/components/AnalyticsView.vue \
+  '                            :key="row.channel"
+                            class="border-b border-border last:border-b-0"' \
+  '                            :key="row.platform"
+                            class="border-b border-border last:border-b-0"' \
+  tests/components/AnalyticsView.spec.ts
+
+# 65. The legend's swatch is the channel's colour — the aggregator's route is
+# lighter than the plugin's own.
+check "the legend swatch is the channel's colour" src/components/AnalyticsView.vue \
+  'return channelOf(row.via, row.platform)' \
+  "return channelOf('direct', row.platform)" \
+  tests/components/AnalyticsView.spec.ts
+
+# 66. The series key is read as a channel, not as a network's name.
+check "the series key is read as a channel" src/components/AnalyticsView.vue \
+  'background: chartColorVar(channelFromKey(channel)),' \
+  "background: chartColorVar(channelOf('direct', channel))," \
+  tests/components/AnalyticsView.spec.ts
+
+# 67. The route shifts the lightness, so two routes of one network are two
+# colours.
+check "the route shifts the lightness" src/lib/platforms.ts \
+  'const shift = channel.via === DIRECT_ROUTE ? 0 : AGGREGATOR_LIGHTNESS' \
+  'const shift = 0' \
+  tests/lib/platforms.spec.ts
+
+# 68. The calendar draws the channels a post goes to.
+check "the calendar draws the channels" src/components/CalendarGrid.vue \
+  'return uniqueChannels(post.channels)' \
+  'return []' \
+  tests/components/CalendarGrid.spec.ts
+
+# 69. Two accounts on one channel are one chip.
+check "the calendar folds the channels" src/components/CalendarGrid.vue \
+  'return uniqueChannels(post.channels)' \
+  'return post.channels' \
+  tests/components/CalendarGrid.spec.ts
+
+# 70. "Aggregator" is a house word, so the gate does not call it an
+# untranslated placeholder.
+check "the house word is exempt" scripts/i18n.mjs \
+  "    'Aggregator'," \
+  '' \
+  tests/i18n.spec.ts
+
+# 71. The German catalogue keeps the house word as it is.
+check "the german catalogue keeps the house word" src/locales/de.json \
+  '"Aggregator": "Aggregator"' \
+  '"Aggregator": "Aggregator-Dienst"' \
+  tests/i18n.spec.ts
 
 
 # 10. The theme toggle writes the persisted value.
@@ -208,8 +263,8 @@ check "post reach null" src/lib/metrics.ts \
 
 # 26. The network table shows a dash for a counter that was never reported.
 check "network null reach" src/components/AnalyticsView.vue \
-  '{{ formatCounter(network.reach) }}' \
-  '{{ network.reach.toLocaleString() }}' \
+  '{{ formatCounter(row.reach) }}' \
+  '{{ row.reach.toLocaleString() }}' \
   tests/components/AnalyticsView.spec.ts
 
 # 27. The reach tile shows a dash when no network reported a reach.
@@ -226,8 +281,29 @@ check "chart day total" src/components/AnalyticsView.vue \
 
 # 29. The top-posts table shows a dash for a reach that was never reported.
 check "top post null reach" src/components/AnalyticsView.vue \
-  '{{ formatCounter(post.reach) }}' \
-  '{{ post.reach.toLocaleString() }}' \
+  '{{ formatCounter(row.reach) }}' \
+  '{{ row.reach.toLocaleString() }}' \
+  tests/components/AnalyticsView.spec.ts
+
+# 72. The top-post rows are keyed by their target. Two rows with one key are
+# one row patched twice, and one row would wear the other's numbers.
+check "the top post row is keyed by its target" src/lib/metrics.ts \
+  '        ? `target:${post.target_id}`' \
+  '        ? `post:${post.post_id}:${post.via}:${post.platform}`' \
+  tests/lib/metrics.spec.ts
+
+# 73. A row without a target id is folded by the post, the route and the
+# network — the way a backend that sends no target id answered.
+check "a row without a target is folded by the post" src/lib/metrics.ts \
+  '        : `post:${post.post_id}:${post.via}:${post.platform}`' \
+  '        : `target:${post.post_id}`' \
+  tests/lib/metrics.spec.ts
+
+# 74. The post's title spans the rows of the places it reached, so the two
+# rows read as one post going to two places.
+check "the post's title spans its rows" src/components/AnalyticsView.vue \
+  ':rowspan="group.rows.length"' \
+  ':rowspan="1"' \
   tests/components/AnalyticsView.spec.ts
 
 # 40. The platform entry's flag is read, not the entry itself.
@@ -400,14 +476,6 @@ check "refresh stays on a token that expires" src/components/ConnectionsGrid.vue
   '                        v-if="false"' \
   tests/components/ConnectionsGrid.spec.ts
 
-                    <code>/api/v1/plugins/social/oauth/linkedin/callback</code>
-                    <button type="button" data-test="copy-redirect-uri-linkedin">Copy</button>
-                </div>
-                <!-- The setup instruction names what is missing and where to add' \
-  tests/components/ConnectionsGrid.spec.ts
-
-
-
 # 59. The server's setup message surfaces; the client does not refuse it itself.
 check "the server's message surfaces" src/pages/AccountsPage.vue \
   '    const result = await social.connectProvider(principalId.value, provider)' \
@@ -417,11 +485,11 @@ check "the server's message surfaces" src/pages/AccountsPage.vue \
     const result = await social.connectProvider(principalId.value, provider)' \
   tests/pages/AccountsPage.spec.ts
 
-# 60. The frontend reads no redirect_uri from the config.
-check "no redirect uri is read" src/api/social.ts \
-  '        config_id: entry?.config_id ?? null,' \
-  '        config_id: entry?.config_id ?? null,
-        redirect_uri: entry?.redirect_uri ?? null,' \
+# 60. The frontend reads the redirect_uri the backend sent — the setup guide
+# names it, and the operator cannot work it out.
+check "the redirect uri is read" src/api/social.ts \
+  '        redirect_uri: entry?.redirect_uri ?? null,' \
+  '        redirect_uri: null,' \
   tests/stores/social.spec.ts
 
 # 58. The setup card renders the backend's wording.

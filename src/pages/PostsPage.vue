@@ -19,12 +19,12 @@ import PostImage from '../components/PostImage.vue'
 import { useSocialStore } from '../stores/social'
 import * as socialApi from '../api/social'
 import { analyticsPath, composePostPath, postsPath } from '../lib/paths'
-import { platformLabel } from '../lib/platforms'
+import { channelFromKey, channelLabel, networkLabel, routeLabel } from '../lib/platforms'
 import { formatDateTime } from '../lib/format'
 import { formatCounter } from '../lib/metrics'
 import { awaitingAgent, sourceLabel } from '../lib/postSource'
 import { statusLabel, statusPill } from '../lib/postStatus'
-import type { Platform, PostMedia, PostStatus, PostTarget, SocialPost } from '../types'
+import type { PostMedia, PostStatus, PostTarget, SocialPost } from '../types'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -227,8 +227,13 @@ watch(drawerPostId, () => {
             </div>
         </div>
 
-        <AnalyticsView v-if="isAnalytics" :summary="social.analytics" />
-        <PostsTable v-else :posts="social.posts" :principal-id="principalId ?? 0" />
+        <AnalyticsView v-if="isAnalytics" :summary="social.analytics" :config="social.config" />
+        <PostsTable
+            v-else
+            :posts="social.posts"
+            :principal-id="principalId ?? 0"
+            :config="social.config"
+        />
 
         <div
             v-if="drawerPost !== null"
@@ -295,15 +300,15 @@ watch(drawerPostId, () => {
                         </div>
 
                         <div
-                            v-for="(platformBody, platform) in drawerPost.platform_bodies"
-                            :key="platform"
+                            v-for="(channelBody, channel) in drawerPost.platform_bodies"
+                            :key="channel"
                             class="mt-3"
                         >
                             <span class="field-label">
-                                {{ platformLabel(platform as Platform) }}
+                                {{ channelLabel(channelFromKey(channel), social.rules) }}
                             </span>
                             <p class="whitespace-pre-wrap rounded-lg border border-border p-3 text-sm leading-relaxed">
-                                {{ platformBody }}
+                                {{ channelBody }}
                             </p>
                         </div>
                     </div>
@@ -335,7 +340,8 @@ watch(drawerPostId, () => {
                                             {{ drawerPost.accounts.find((account) => account.id === target.account_id)?.display_name ?? target.platform }}
                                         </div>
                                         <div class="text-[10px] text-muted-foreground">
-                                            {{ platformLabel(target.platform as Platform) }}
+                                            {{ networkLabel(target.platform, social.rules) }}
+                                            <span class="opacity-70" :data-test="`target-route-${target.id}`">{{ routeLabel(target.via, social.config?.aggregators ?? {}) }}</span>
                                         </div>
                                     </div>
                                     <span class="pill pill-neutral">{{ targetStatusLabel(target.status) }}</span>
@@ -356,7 +362,7 @@ watch(drawerPostId, () => {
                                     class="mt-2 inline-flex items-center gap-1 text-[11px] underline underline-offset-2"
                                 >
                                     <ExternalLink class="h-3 w-3" />
-                                    {{ t('View on {platform}', { platform: platformLabel(target.platform as Platform) }) }}
+                                    {{ t('View on {network}', { network: networkLabel(target.platform, social.rules) }) }}
                                 </a>
 
                                 <div v-if="target.metrics" class="mt-2.5 border-t border-border pt-2">

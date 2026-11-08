@@ -5,10 +5,14 @@
  * operator holds — a Meta login publishes as an Instagram professional account
  * *and* as a Facebook Page, under one token. The token's health belongs to
  * the connection, not to the accounts inside it.
+ *
+ * **The brands live here.** The providers' own names and the three networks'
+ * own names are the platforms' brands: they read the same in every language,
+ * so the catalogue leaves them alone.
  */
 import { t } from '../i18n'
 import { daysUntil } from './format'
-import type { ConnectionStatus, Provider, SocialConnection } from '../types'
+import type { ConnectionStatus, NativeNetwork, Provider, SocialConnection } from '../types'
 
 /** The providers' own names. They read the same in every language. */
 export const PROVIDER_LABELS: Record<Provider, string> = {
@@ -16,10 +20,42 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
     linkedin: 'LinkedIn',
 }
 
+/**
+ * The networks the plugin reaches on its own route, and the names the
+ * operator knows them by.
+ *
+ * A **fallback**, and only a fallback: the backend's rules carry the names it
+ * knows and they win. These three are the plugin's own networks — a closed
+ * set the backend cannot add to — and their names are brands, so an account
+ * card that read "linkedin" would show the machine's name where the operator
+ * knows a brand.
+ */
+export const NATIVE_NETWORK_NAMES: Record<string, string | undefined> = {
+    linkedin: 'LinkedIn',
+    facebook: 'Facebook',
+    instagram: 'Instagram',
+} satisfies Record<NativeNetwork, string>
+
 export const PROVIDERS: Provider[] = ['meta', 'linkedin']
 
-export function providerLabel(provider: Provider): string {
-    return PROVIDER_LABELS[provider]
+/**
+ * Whether a provider is one of the plugin's own logins.
+ *
+ * Anything else is an aggregator's slug — which is also the route its
+ * accounts publish through.
+ */
+export function isNativeProvider(provider: string): provider is Provider {
+    return (PROVIDERS as string[]).includes(provider)
+}
+
+/**
+ * The provider's own name.
+ *
+ * A provider the plugin does not know falls back to its own name: an
+ * aggregator's slug is a route, and the screen names it from the config.
+ */
+export function providerLabel(provider: string): string {
+    return isNativeProvider(provider) ? PROVIDER_LABELS[provider] : provider
 }
 
 /**

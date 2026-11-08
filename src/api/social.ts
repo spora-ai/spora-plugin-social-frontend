@@ -13,6 +13,9 @@
 import { getApi } from './client'
 import type {
     AccountHealth,
+    AggregatorConfig,
+    AggregatorResult,
+    AggregatorSyncResult,
     AnalyticsSummary,
     CalendarPayload,
     ConnectAccountResult,
@@ -20,7 +23,7 @@ import type {
     MediaAssetSummary,
     MediaCheckFit,
     MediaPrepareResult,
-    Platform,
+    NativeNetwork,
     Provider,
     ProviderConfig,
     ProviderSetupNotice,
@@ -120,20 +123,72 @@ export async function checkConnectionHealth(
 }
 
 /**
- * What the operator has configured, and what the platforms accept.
+ * The aggregator's key, stored.
+ *
+ * This is the only way in: the agent's tools have no way to write a
+ * credential, because a credential belongs where a person can see it,
+ * replace it and revoke it.
+ */
+export async function setAggregatorKey(
+    principalId: number,
+    aggregator: string,
+    apiKey: string,
+): Promise<AggregatorResult> {
+    return getApi().post<AggregatorResult>(`${BASE}/aggregators`, {
+        principal_id: principalId,
+        aggregator,
+        api_key: apiKey,
+    })
+}
+
+/**
+ * The aggregator's key, forgotten.
+ *
+ * The accounts stay in the aggregator — they are its accounts, and the
+ * operator removes them there.
+ */
+export async function forgetAggregator(
+    principalId: number,
+    aggregator: string,
+): Promise<AggregatorResult> {
+    return getApi().delete<AggregatorResult>(
+        withPrincipal(`${BASE}/aggregators/${aggregator}`, principalId),
+    )
+}
+
+/** The aggregator's accounts, read again. */
+export async function syncAggregator(
+    principalId: number,
+    aggregator: string,
+): Promise<AggregatorSyncResult> {
+    return getApi().post<AggregatorSyncResult>(`${BASE}/aggregators/${aggregator}/sync`, {
+        principal_id: principalId,
+    })
+}
+
+/**
+ * What the operator has configured, and what the channels accept.
  *
  * The rules travel with the providers: the composer's counters and the badge
  * on an attachment read the limits from here, because the backend is what
  * refuses the publish. A copy in the frontend warns about a number the
  * backend no longer enforces.
+ *
+ * **The request names the principal.** The aggregators' flags are the
+ * principal's — the key is the operator's, and it lives on the connection
+ * row — so a request without a principal answers that nobody's key is
+ * known, and the button would never appear.
  */
-export async function getConfig(): Promise<SocialConfig> {
-    const result = await getApi().get<Partial<SocialConfig>>(`${BASE}/config`)
+export async function getConfig(principalId: number): Promise<SocialConfig> {
+    const result = await getApi().get<Partial<SocialConfig>>(`${BASE}/config`, {
+        principal_id: principalId,
+    })
     return {
         providers: {
             meta: readProviderConfig(result.providers?.meta),
             linkedin: readProviderConfig(result.providers?.linkedin),
         },
+        aggregators: readAggregators(result.aggregators),
         app_url: result.app_url ?? null,
         app_url_public: result.app_url_public === true,
         rules: result.rules ?? ({} as SocialConfig['rules']),
@@ -155,6 +210,29 @@ function readProviderConfig(entry: Partial<ProviderConfig> | undefined): Provide
         needs_setup: readSetupNotice(entry?.needs_setup),
         redirect_uri: entry?.redirect_uri ?? null,
     }
+}
+
+/**
+ * The aggregators' entries.
+ *
+ * The same reading as the providers': a missing entry or a missing field
+ * means "not set up", so a malformed entry cannot slip through as
+ * "configured".
+ */
+function readAggregators(
+    entries: Partial<Record<string, AggregatorConfig>> | undefined,
+): Record<string, AggregatorConfig> {
+    const aggregators: Record<string, AggregatorConfig> = {}
+
+    for (const [slug, entry] of Object.entries(entries ?? {})) {
+        aggregators[slug] = {
+            configured: entry?.configured === true,
+            label: entry?.label ?? slug,
+            needs_setup: entry?.needs_setup ?? null,
+        }
+    }
+
+    return aggregators
 }
 
 /**
@@ -227,7 +305,13 @@ export async function getCalendar(principalId: number, month: string): Promise<C
     })
     // The month carries the posts and nothing else: the `days` key existed
     // only for the slot tint, and the static slot is gone.
-    return { posts: result.posts ?? [] }
+    //
+    // The channels go along with the posts, and a post that arrives without
+    // them is a post the calendar shows without a chip — not a post that
+    // breaks the month.
+    return {
+        posts: (result.posts ?? []).map((post) => ({ ...post, channels: post.channels ?? [] })),
+    }
 }
 
 /**
@@ -280,23 +364,37 @@ export async function listMedia(
     )
 }
 
+/**
+ * Whether an asset fits the channels, in the backend's own words.
+ *
+ * The backend's verdict is the authority: it judges the media as the
+ * network receives it — Instagram takes no PNG, and the pipeline converts
+ * one first — so a verdict computed here would warn about a post that goes
+ * out.
+ *
+ * The channels are the channel's keys, the route and then the network.
+ */
 export async function checkMediaFit(
     principalId: number,
     mediaAssetId: string,
-    platforms: Platform[],
+    channels: string[],
 ): Promise<MediaCheckFit> {
-    return getApi().post<MediaCheckFit>(`${BASE}/media/check-fit`, {
+    const result = await getApi().post<Partial<MediaCheckFit>>(`${BASE}/media/check-fit`, {
         principal_id: principalId,
         media_asset_id: mediaAssetId,
-        platforms,
+        channels,
     })
+    return {
+        fits: result.fits === true,
+        per_channel: result.per_channel ?? [],
+    }
 }
 
 /** Instagram's step: the JPEG derivative and the public URL Instagram will fetch. */
 export async function prepareMedia(
     principalId: number,
     mediaAssetId: string,
-    platform: Platform,
+    platform: NativeNetwork,
 ): Promise<MediaPrepareResult> {
     return getApi().post<MediaPrepareResult>(`${BASE}/media/prepare`, {
         principal_id: principalId,

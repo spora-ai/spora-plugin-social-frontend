@@ -7,16 +7,23 @@
  * same words every week, its template only knew date and time variables, and
  * LinkedIn and Meta ship native scheduled posts anyway. What remains is what
  * is actually going out, on the day it goes out.
+ *
+ * **Every post names the channels it goes to.** The calendar answers what is
+ * going out and where, and a post that named only the network would not say
+ * which of the two routes it goes out through.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatWhen } from '../lib/format'
-import type { CalendarPost } from '../types'
+import { brandColorVar, networkLabel, routeLabel, uniqueChannels } from '../lib/platforms'
+import type { CalendarPost, Channel, SocialConfig } from '../types'
 
 const props = defineProps<{
     /** `YYYY-MM`. */
     month: string
     posts: CalendarPost[]
+    /** The plugin's configuration — it carries the networks' names. */
+    config: SocialConfig | null
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +33,21 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+const rules = computed(() => props.config?.rules ?? {})
+
+const aggregators = computed(() => props.config?.aggregators ?? {})
+
+/**
+ * The channels a post goes to — one per channel.
+ *
+ * The backend sends one entry per target, and a target is an account: two
+ * accounts on one channel are one channel, and the grid draws one chip for
+ * it.
+ */
+function channelsOf(post: CalendarPost): Channel[] {
+    return uniqueChannels(post.channels)
+}
 
 function dateKey(date: Date): string {
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -71,7 +93,7 @@ const cells = computed(() => {
             today: key === today,
             posts: props.posts.filter((post) => {
                 const when = post.scheduled_for ?? post.published_at
-                return when !== null && when !== undefined && when.slice(0, 10) === key
+                return when?.slice(0, 10) === key
             }),
         })
     }
@@ -150,10 +172,25 @@ function shiftMonth(delta: number): void {
                 <div
                     v-for="post in cell.posts"
                     :key="post.post_id"
-                    class="pill pill-scheduled w-full justify-start gap-1 truncate text-left"
+                    class="space-y-0.5"
                     :data-test="`calendar-post-${post.post_id}`"
                 >
-                    <span class="truncate">{{ post.title }}</span>
+                    <div class="pill pill-scheduled w-full justify-start gap-1 truncate text-left">
+                        <span class="truncate">{{ post.title }}</span>
+                    </div>
+                    <div v-if="channelsOf(post).length > 0" class="flex flex-wrap gap-0.5">
+                        <span
+                            v-for="channel in channelsOf(post)"
+                            :key="channel.key"
+                            class="platform-chip"
+                            :data-network="channel.network"
+                            :style="{ '--network-color': brandColorVar(channel.network) }"
+                            :data-test="`calendar-channel-${channel.key}`"
+                        >
+                            {{ networkLabel(channel.network, rules) }}
+                            <span class="opacity-70">{{ routeLabel(channel.via, aggregators) }}</span>
+                        </span>
+                    </div>
                 </div>
 
                 <span v-if="cell.posts.length > 0" class="text-[10px] text-muted-foreground">

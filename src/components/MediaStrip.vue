@@ -2,15 +2,17 @@
 /**
  * The attachments on the composer.
  *
- * Each one carries its fit state **for the platforms currently targeted**, so a
- * PNG attached while Instagram is among the targets says so *on the
- * attachment* — the operator can act on that, and it is not something they
- * have to find in the preview column.
+ * Each one carries its fit state **for the channels currently targeted**, so a
+ * file the network will not take says so *on the attachment* — the operator
+ * can act on that, and it is not something they have to find in the preview
+ * column.
  *
- * The badge quotes the backend: the note is the platform's media rule in the
- * backend's words and the remedy is the action the backend names. A badge
- * that phrased the rule differently would put two sentences about the same
- * file on the screen.
+ * **The badge quotes the backend.** The verdict is the backend's, because the
+ * backend judges the media as the network receives it: Instagram takes no
+ * PNG, and the pipeline converts one before it goes out, so a fit computed
+ * here would warn about a post that goes out. The reason names what is
+ * wrong and the remedy names what to do about it, so the badge and the
+ * refusal at publish time read as one thing.
  *
  * Every attachment can be removed: a mistaken pick should not cost the
  * operator the draft.
@@ -18,15 +20,19 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { TriangleAlert, X } from 'lucide-vue-next'
-import { mediaFit } from '../lib/platforms'
-import type { ComposerAttachment, Platform, PlatformRules } from '../types'
+import type { ComposerAttachment, MediaFitResult } from '../types'
 
 const props = defineProps<{
     attachments: ComposerAttachment[]
-    /** The platforms the post currently targets. */
-    platforms: Platform[]
-    /** The rules the backend sent — the badge quotes them. */
-    rules: Partial<Record<Platform, PlatformRules>>
+    /** The channels the post currently targets. */
+    channels: string[]
+    /**
+     * The backend's verdict on each attachment, per channel.
+     *
+     * An attachment with no verdict has not been judged yet, and an
+     * attachment the backend found no fault with has no badge.
+     */
+    verdicts: Record<string, MediaFitResult[]>
 }>()
 
 const emit = defineEmits<{
@@ -36,28 +42,28 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 /**
- * The platforms this attachment does not fit, with the remedy for each.
+ * The channels an attachment does not fit, with the remedy for each.
  *
- * A platform whose rule has not arrived is left out: without the rule there
- * is nothing to judge the file against.
+ * The verdict is the backend's: its reason says what is wrong and its
+ * remedy says what to do about it. Only the channels the post targets are
+ * judged — a verdict for a channel it no longer goes to is no verdict.
  */
 const problems = computed(() => {
-    const map = new Map<string, { platform: Platform; reason: string; remedy: string }[]>()
+    const map = new Map<string, { channel: string; reason: string; remedy: string }[]>()
     for (const attachment of props.attachments) {
-        const failures = props.platforms
-            .map((platform) => {
-                const rule = props.rules[platform]
-                if (rule === undefined) return null
-                const fit = mediaFit(attachment, rule)
-                return fit.fits ? null : { platform, reason: fit.reason, remedy: fit.remedy }
-            })
-            .filter((failure) => failure !== null)
+        const failures = (props.verdicts[attachment.media_asset_id] ?? [])
+            .filter((verdict) => !verdict.fits && props.channels.includes(verdict.channel))
+            .map((verdict) => ({
+                channel: verdict.channel,
+                reason: verdict.reasons.join(' '),
+                remedy: verdict.remedy ?? '',
+            }))
         if (failures.length > 0) map.set(attachment.media_asset_id, failures)
     }
     return map
 })
 
-function problemsFor(mediaAssetId: string): { platform: Platform; reason: string; remedy: string }[] {
+function problemsFor(mediaAssetId: string): { channel: string; reason: string; remedy: string }[] {
     return problems.value.get(mediaAssetId) ?? []
 }
 
@@ -82,12 +88,13 @@ function mimeLabel(mime: string): string {
                 <span class="block max-w-[9rem] truncate text-[11px] font-medium">{{ attachment.filename }}</span>
                 <span
                     v-for="problem in problemsFor(attachment.media_asset_id)"
-                    :key="problem.platform"
+                    :key="problem.channel"
                     class="pill pill-partial mt-0.5"
-                    :data-test="`media-fit-${attachment.media_asset_id}-${problem.platform}`"
+                    :data-test="`media-fit-${attachment.media_asset_id}-${problem.channel}`"
                 >
                     <TriangleAlert class="h-3 w-3" />
-                    {{ problem.reason }} · {{ problem.remedy }}
+                    {{ problem.reason }}
+                    <template v-if="problem.remedy !== ''"> · {{ problem.remedy }}</template>
                 </span>
             </span>
             <button

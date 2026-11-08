@@ -15,11 +15,11 @@ import { t } from '../i18n'
 import * as socialApi from '../api/social'
 import type {
     AccountHealth,
+    AggregatorResult,
     AnalyticsSummary,
     CalendarPayload,
     ConnectAccountResult,
     CreatePostPayload,
-    Platform,
     PlatformRules,
     PostList,
     PostQuery,
@@ -33,6 +33,13 @@ import type {
 export const useSocialStore = defineStore('social', () => {
     /** The read of the config, while it is in flight. */
     let configPromise: Promise<void> | null = null
+    /**
+     * The principal the cached config belongs to.
+     *
+     * The aggregators' flags are the principal's — the key is the operator's
+     * — so a config read for one principal says nothing about another's.
+     */
+    let configPrincipalId: number | null = null
 
     const connections = ref<SocialConnection[]>([])
     const posts = ref<SocialPost[]>([])
@@ -48,13 +55,13 @@ export const useSocialStore = defineStore('social', () => {
     const notice = ref<string | null>(null)
 
     /**
-     * The rules the backend enforces, per platform.
+     * The rules the backend enforces, per channel.
      *
      * Empty until the config has been read, and empty for good when the
      * config could not be read: the composer must not fall back to a limit
      * of its own.
      */
-    const rules = computed<Partial<Record<Platform, PlatformRules>>>(() => config.value?.rules ?? {})
+    const rules = computed<Record<string, PlatformRules>>(() => config.value?.rules ?? {})
 
     /**
      * Every account, from every connection.
@@ -117,23 +124,35 @@ export const useSocialStore = defineStore('social', () => {
     }
 
     /**
-     * The config: the platform entries and the rules every screen reads.
+     * The config: the provider entries, the aggregators and the rules every
+     * screen reads.
      *
-     * Read once. The composer needs the rules and the accounts screen needs
-     * the entries, and a second read would be a second answer to a question
-     * that has not changed — so a caller that arrives while the read is in
-     * flight waits for that read instead of starting another.
+     * Read once per principal. The composer needs the rules and the accounts
+     * screen needs the entries, and a second read would be a second answer to
+     * a question that has not changed — so a caller that arrives while the
+     * read is in flight waits for that read instead of starting another.
      *
      * A failed read is not final: the next caller tries again, because a
      * config that could not be read is a temporary state and the rules are
      * what the composer judges the body against.
+     *
+     * The aggregators' flags are the principal's, so another principal is
+     * another config — and a forced read is what a changed key asks for.
      */
-    async function loadConfig(): Promise<void> {
-        if (configPromise !== null && configError.value === null) return configPromise
+    async function loadConfig(principalId: number, force = false): Promise<void> {
+        if (
+            configPromise !== null &&
+            configError.value === null &&
+            !force &&
+            configPrincipalId === principalId
+        ) {
+            return configPromise
+        }
 
         configPromise = (async () => {
             try {
-                config.value = await socialApi.getConfig()
+                config.value = await socialApi.getConfig(principalId)
+                configPrincipalId = principalId
                 configError.value = null
             } catch (e) {
                 configError.value = apiMessage(e, t('Could not read the plugin configuration.'))
@@ -193,6 +212,61 @@ export const useSocialStore = defineStore('social', () => {
         connections.value = connections.value.map((connection) =>
             connection.id === updated.id ? updated : connection,
         )
+    }
+
+    /**
+     * The aggregator's key, stored.
+     *
+     * The connections are read again afterwards: the aggregator's accounts
+     * are discovered rather than connected, so they are only known once the
+     * key is there. The config is read again too — its flag is what says
+     * whether the aggregator is set up.
+     */
+    async function setAggregatorKey(
+        principalId: number,
+        aggregator: string,
+        apiKey: string,
+    ): Promise<AggregatorResult | null> {
+        try {
+            const result = await socialApi.setAggregatorKey(principalId, aggregator, apiKey)
+            await Promise.all([loadConnections(principalId), loadConfig(principalId, true)])
+            return result
+        } catch (e) {
+            fail(e, t('Could not save the key.'))
+            return null
+        }
+    }
+
+    /**
+     * The aggregator's key, forgotten.
+     *
+     * The accounts stay in the aggregator: they are its accounts, and the
+     * operator removes them there.
+     */
+    async function forgetAggregator(
+        principalId: number,
+        aggregator: string,
+    ): Promise<AggregatorResult | null> {
+        try {
+            const result = await socialApi.forgetAggregator(principalId, aggregator)
+            await Promise.all([loadConnections(principalId), loadConfig(principalId, true)])
+            return result
+        } catch (e) {
+            fail(e, t('Could not forget the key.'))
+            return null
+        }
+    }
+
+    /** The aggregator's accounts, read again. */
+    async function syncAggregator(principalId: number, aggregator: string): Promise<boolean> {
+        try {
+            await socialApi.syncAggregator(principalId, aggregator)
+            await loadConnections(principalId)
+            return true
+        } catch (e) {
+            fail(e, t('Could not read the accounts.'))
+            return false
+        }
     }
 
     async function createPost(payload: CreatePostPayload): Promise<SocialPost | null> {
@@ -306,6 +380,9 @@ export const useSocialStore = defineStore('social', () => {
         disconnectConnection,
         refreshConnection,
         checkConnectionHealth,
+        setAggregatorKey,
+        forgetAggregator,
+        syncAggregator,
         createPost,
         updatePost,
         publishPost,

@@ -36,6 +36,10 @@ describe('CalendarPage', () => {
                             status: 'scheduled',
                             scheduled_for: `${month}-15T09:00:00+00:00`,
                             published_at: null,
+                            channels: [
+                                { key: 'direct:linkedin', network: 'linkedin', via: 'direct' },
+                                { key: 'zernio:bluesky', network: 'bluesky', via: 'zernio' },
+                            ],
                         },
                     ],
                 })

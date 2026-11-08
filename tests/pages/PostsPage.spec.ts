@@ -7,7 +7,7 @@ import AnalyticsView from '../../src/components/AnalyticsView.vue'
 import PostsTable from '../../src/components/PostsTable.vue'
 import { useSocialStore } from '../../src/stores/social'
 import { makeMedia, makeMetrics, makePost, makeTarget } from '../fixtures'
-import { SUMMARY_PAYLOAD } from '../recorded'
+import { CONFIG_PAYLOAD, SUMMARY_PAYLOAD } from '../recorded'
 import { hostContext, mountPage, stubRoutes } from '../mountPage'
 import type { PluginHostContext } from '../../src/shims'
 import type { SocialPost } from '../../src/types'
@@ -149,6 +149,7 @@ describe('PostsPage — the two views of the Posts tab', () => {
                         id: 501,
                         account_id: 12,
                         platform: 'linkedin',
+                        via: 'direct',
                         status: 'published',
                         external_id: 'urn:li:share:9',
                         external_url: 'https://www.linkedin.com/feed/update/urn:li:share:9',
@@ -160,6 +161,7 @@ describe('PostsPage — the two views of the Posts tab', () => {
                         id: 502,
                         account_id: 13,
                         platform: 'instagram',
+                        via: 'direct',
                         status: 'failed',
                         external_id: null,
                         external_url: null,
@@ -186,6 +188,26 @@ describe('PostsPage — the two views of the Posts tab', () => {
         expect(drawer.text()).toContain('Instagram only accepts JPEG')
     })
 
+    it('names the route on every target', async () => {
+        // The same network on two routes is two accounts, and a target that
+        // names only the network says nothing about which of the two it is.
+        const { wrapper, social } = await mountDrawer(
+            makePost({
+                id: 88,
+                targets: [
+                    makeTarget({ id: 501, account_id: 12, platform: 'linkedin', via: 'direct' }),
+                    makeTarget({ id: 502, account_id: 15, platform: 'linkedin', via: 'zernio' }),
+                ],
+            }),
+        )
+
+        social.config = CONFIG_PAYLOAD
+        await wrapper.vm.$nextTick()
+
+        expect(wrapper.find('[data-test="target-route-501"]').text()).toBe('Direct')
+        expect(wrapper.find('[data-test="target-route-502"]').text()).toBe('Zernio')
+    })
+
     it('warns that a draft without an account cannot go out', async () => {
         // A draft may be written before any account is connected. The drawer
         // says so instead of showing nothing under the Targets label.
@@ -209,6 +231,7 @@ describe('PostsPage — the two views of the Posts tab', () => {
                         id: 501,
                         account_id: 12,
                         platform: 'linkedin',
+                        via: 'direct',
                         status: 'published',
                         external_id: 'urn:li:share:9',
                         external_url: null,

@@ -4,11 +4,13 @@ import {
     measuredTargets,
     postEngagementRate,
     postEngagements,
-    postPlatforms,
+    postChannels,
     postReach,
+    topPostGroups,
+    topPostRows,
 } from '../../src/lib/metrics'
 import { makeMetrics, makePost, makeTarget } from '../fixtures'
-import type { SocialPost } from '../../src/types'
+import type { SocialPost, TopPost } from '../../src/types'
 
 /** A post whose targets report the given reaches — null means "not reported". */
 function postWithReaches(...reaches: (number | null)[]): SocialPost {
@@ -93,15 +95,169 @@ describe('lib/metrics — a null is not a zero', () => {
         expect(postEngagements(post)).toBe(26)
     })
 
-    it('names the platforms a post went to, once each', () => {
+    it('names the channels a post went to, once each', () => {
         const post = makePost({
             targets: [
-                makeTarget({ id: 501, platform: 'linkedin' }),
-                makeTarget({ id: 502, platform: 'linkedin' }),
-                makeTarget({ id: 503, platform: 'instagram' }),
+                makeTarget({ id: 501, platform: 'linkedin', via: 'direct' }),
+                makeTarget({ id: 502, platform: 'linkedin', via: 'direct' }),
+                makeTarget({ id: 503, platform: 'instagram', via: 'direct' }),
             ],
         })
 
-        expect(postPlatforms(post)).toEqual(['linkedin', 'instagram'])
+        expect(postChannels(post).map((channel) => channel.key)).toEqual([
+            'direct:linkedin',
+            'direct:instagram',
+        ])
+    })
+
+    it('keeps the two routes to one network apart', () => {
+        // The same network through two routes is two accounts, and the row
+        // has to say which one it was.
+        const post = makePost({
+            targets: [
+                makeTarget({ id: 501, platform: 'linkedin', via: 'direct' }),
+                makeTarget({ id: 502, platform: 'linkedin', via: 'zernio' }),
+            ],
+        })
+
+        expect(postChannels(post).map((channel) => channel.key)).toEqual([
+            'direct:linkedin',
+            'zernio:linkedin',
+        ])
+    })
+})
+
+/** A top post as the backend sends it — one row per target. */
+function topPost(overrides: Partial<TopPost> = {}): TopPost {
+    return {
+        post_id: 88,
+        title: 'Q4 release',
+        target_id: 501,
+        platform: 'linkedin',
+        via: 'direct',
+        reach: 4820,
+        impressions: 9310,
+        likes: 12,
+        published_at: '2026-11-02T09:00:04+00:00',
+        ...overrides,
+    }
+}
+
+/**
+ * A top post from a backend that sends **no target id** — one row per
+ * reading, the way the plugin's earlier releases answered.
+ */
+function topPostWithoutTarget(overrides: Partial<TopPost> = {}): TopPost {
+    return { ...topPost(overrides), target_id: undefined }
+}
+
+describe('lib/metrics — the top posts', () => {
+    it('folds two rows of one target into one row', () => {
+        // The backend sends one row per target, and a row sent twice is one
+        // reading sent twice.
+        const rows = topPostRows([topPost({ reach: 1200 }), topPost({ reach: 900 })])
+
+        expect(rows).toHaveLength(1)
+        expect(rows[0]?.key).toBe('target:501')
+    })
+
+    it('keeps the first row of a target, which is the one that reached the most', () => {
+        // The backend sorts the rows by reach before it sends them, so the
+        // first of them is the reading that reached the most people.
+        const rows = topPostRows([topPost({ reach: 1200 }), topPost({ reach: 900 })])
+
+        expect(rows[0]?.reach).toBe(1200)
+        expect(rows[0]?.key).toBe('target:501')
+    })
+
+    it('keeps the two targets of one post on one channel apart', () => {
+        // A member profile and an organisation page are two accounts of one
+        // channel: the same post, the same route, the same network — and two
+        // sets of numbers. Folding them would drop the second one's numbers.
+        const rows = topPostRows([
+            topPost({ post_id: 88, target_id: 501, via: 'direct', reach: 100 }),
+            topPost({ post_id: 88, target_id: 502, via: 'direct', reach: 30 }),
+        ])
+
+        expect(rows).toHaveLength(2)
+        expect(rows.map((row) => row.key)).toEqual(['target:501', 'target:502'])
+        expect(rows.map((row) => row.reach)).toEqual([100, 30])
+    })
+
+    it('keeps the two targets of one post on two channels apart', () => {
+        const rows = topPostRows([
+            topPost({ post_id: 88, target_id: 501, via: 'direct' }),
+            topPost({ post_id: 88, target_id: 502, via: 'zernio', reach: 40 }),
+        ])
+
+        expect(rows).toHaveLength(2)
+        expect(rows.map((row) => row.key)).toEqual(['target:501', 'target:502'])
+    })
+
+    it('folds a row without a target by the post, the route and the network', () => {
+        // The plugin is released before the frontend, so a released frontend
+        // may run against a plugin that sends no target id — and that one
+        // sends a row per reading.
+        const rows = topPostRows([
+            topPostWithoutTarget({ reach: 1200 }),
+            topPostWithoutTarget({ reach: 900 }),
+            topPostWithoutTarget({ via: 'zernio' }),
+        ])
+
+        expect(rows).toHaveLength(2)
+        expect(rows.map((row) => row.key)).toEqual([
+            'post:88:direct:linkedin',
+            'post:88:zernio:linkedin',
+        ])
+    })
+
+    it('does not collide with a row that carries a target', () => {
+        // The two key spaces are separate: one begins with `target:` and the
+        // other with `post:`, so a target id can never be read as a post.
+        const rows = topPostRows([topPost({ target_id: 501 }), topPostWithoutTarget()])
+
+        expect(rows).toHaveLength(2)
+        expect(new Set(rows.map((row) => row.key)).size).toBe(2)
+    })
+
+    it('gives every row the backend can send a key of its own', () => {
+        const rows = topPostRows([
+            topPost({ post_id: 88, target_id: 501, via: 'direct' }),
+            topPost({ post_id: 88, target_id: 502, via: 'direct' }),
+            topPost({ post_id: 88, target_id: 503, via: 'zernio' }),
+            topPost({ post_id: 89, target_id: 504, via: 'direct' }),
+        ])
+
+        // Two rows keyed the same are patched into one another, and one row
+        // wears the other's numbers.
+        expect(rows).toHaveLength(4)
+        expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length)
+    })
+})
+
+describe('lib/metrics — the top posts, grouped', () => {
+    it('groups the two targets of one post under one post', () => {
+        // The two rows are one post going to two places, and the group is
+        // what says so.
+        const groups = topPostGroups([
+            topPost({ post_id: 88, target_id: 501 }),
+            topPost({ post_id: 88, target_id: 502, via: 'zernio' }),
+            topPost({ post_id: 89, target_id: 503, platform: 'instagram' }),
+        ])
+
+        expect(groups).toHaveLength(2)
+        expect(groups[0]?.post_id).toBe(88)
+        expect(groups[0]?.rows).toHaveLength(2)
+        expect(groups[0]?.rows.map((row) => row.key)).toEqual(['target:501', 'target:502'])
+        expect(groups[1]?.rows).toHaveLength(1)
+    })
+
+    it('keeps the posts of two titles apart', () => {
+        const groups = topPostGroups([
+            topPost({ post_id: 88, title: 'Q4 release', target_id: 501 }),
+            topPost({ post_id: 89, title: 'Studio launch', target_id: 502 }),
+        ])
+
+        expect(groups.map((group) => group.title)).toEqual(['Q4 release', 'Studio launch'])
     })
 })

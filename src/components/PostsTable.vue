@@ -11,17 +11,19 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Image, TriangleAlert } from 'lucide-vue-next'
 import PostImage from './PostImage.vue'
-import { measuredTargets, formatCounter, postEngagementRate, postPlatforms, postReach } from '../lib/metrics'
+import { measuredTargets, formatCounter, postEngagementRate, postChannels, postReach } from '../lib/metrics'
 import { awaitingAgent, sourceLabel } from '../lib/postSource'
 import { statusLabel, statusPill } from '../lib/postStatus'
 import { formatWhen, NO_VALUE } from '../lib/format'
 import { postPath } from '../lib/paths'
-import { platformLabel } from '../lib/platforms'
-import type { Platform, PostMedia, SocialPost } from '../types'
+import { brandColorVar, networkLabel, routeLabel } from '../lib/platforms'
+import type { PostMedia, SocialConfig, SocialPost } from '../types'
 
 const props = defineProps<{
     posts: SocialPost[]
     principalId: number
+    /** The plugin's configuration — it carries the networks' names. */
+    config: SocialConfig | null
 }>()
 
 const { t } = useI18n()
@@ -147,12 +149,23 @@ function postWhen(post: SocialPost): string | null {
                         </span>
                         <div v-else class="flex flex-wrap gap-1">
                             <span
-                                v-for="platform in postPlatforms(post)"
-                                :key="platform"
-                                class="platform-chip"
-                                :data-platform="platform"
+                                v-for="channel in postChannels(post)"
+                                :key="channel.key"
+                                class="inline-flex items-center gap-1"
                             >
-                                {{ platformLabel(platform as Platform) }}
+                                <span
+                                    class="platform-chip"
+                                    :data-network="channel.network"
+                                    :style="{ '--network-color': brandColorVar(channel.network) }"
+                                >
+                                    {{ networkLabel(channel.network, props.config?.rules ?? {}) }}
+                                </span>
+                                <span
+                                    class="text-[10px] text-muted-foreground"
+                                    :data-test="`post-route-${channel.key}`"
+                                >
+                                    {{ routeLabel(channel.via, props.config?.aggregators ?? {}) }}
+                                </span>
                             </span>
                         </div>
                     </td>

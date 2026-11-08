@@ -10,7 +10,6 @@ import type { ApiError } from '../src/api/client'
 import type { Principal } from '../src/api/principals'
 import type {
     ComposerAttachment,
-    Platform,
     PostMedia,
     PostMetrics,
     PostTarget,
@@ -28,6 +27,7 @@ export function makeAccount(overrides: Partial<SocialAccount> = {}): SocialAccou
         id: 12,
         account_id: 12,
         platform: 'linkedin',
+        via: 'direct',
         kind: 'organization',
         external_id: 'urn:li:organization:412078',
         display_name: 'Fabeat GmbH',
@@ -80,7 +80,7 @@ export function makePost(overrides: Partial<SocialPost> = {}): SocialPost {
         scheduled_for: null,
         timezone: 'Europe/Zurich',
         published_at: '2026-11-02T09:00:04+00:00',
-            accounts: [{ id: 12, platform: 'linkedin', display_name: 'Fabeat GmbH' }],
+        accounts: [{ id: 12, platform: 'linkedin', via: 'direct', display_name: 'Fabeat GmbH' }],
         targets: [makeTarget()],
         media: [],
         metrics: null,
@@ -116,6 +116,7 @@ export function makeTarget(overrides: Partial<PostTarget> = {}): PostTarget {
         id: 501,
         account_id: 12,
         platform: 'linkedin',
+        via: 'direct',
         status: 'published',
         external_id: 'urn:li:share:9',
         external_url: 'https://www.linkedin.com/feed/update/urn:li:share:9',
@@ -148,8 +149,11 @@ export function makeAttachment(overrides: Partial<ComposerAttachment> = {}): Com
     }
 }
 
-/** The platforms in the order the UI lists them. */
-export const ALL_PLATFORMS: Platform[] = ['linkedin', 'facebook', 'instagram']
+/** The networks the plugin reaches on its own route. */
+export const NATIVE_NETWORKS: string[] = ['linkedin', 'facebook', 'instagram']
+
+/** The plugin's own route to a network. */
+export const DIRECT_ROUTE: string = 'direct'
 
 /**
  * The error the host's client throws.
