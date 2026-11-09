@@ -30,6 +30,7 @@ import { getApi, isApiError } from '../api/client'
 import * as socialApi from '../api/social'
 import { agentHasSocialTool, listAgents, type AgentSummary } from '../api/agents'
 import {
+    agentPath,
     agentToolsPath,
     hostLinkAction,
     taskChatPath,
@@ -502,6 +503,21 @@ const taskChatLink = computed<HostLinkAction>(() =>
 )
 
 /**
+ * The agent's own page — its composer and its task history.
+ *
+ * The brief is written here and the agent runs somewhere else, so the
+ * operator needs a way to the agent's side before they send: to see what it
+ * has done, to read the chats it already has, and to know which agent they
+ * are briefing. The link is dead until an agent is chosen, because there is
+ * no agent to go to before that.
+ */
+const agentPageLink = computed<HostLinkAction>(() => {
+    const agent = selectedAgent.value
+    if (agent === null) return { kind: 'disabled' }
+    return hostLinkAction(hostRouter(), agentPath(agent.id))
+})
+
+/**
  * Leave the plugin for a host screen.
  *
  * The router is the host's, and it can be null — the standalone entry passes
@@ -811,7 +827,18 @@ async function submit(): Promise<void> {
             </div>
 
             <div>
-                <label class="field-label" for="cmp-agent">{{ t('The agent') }}</label>
+                <div class="flex items-center justify-between gap-3">
+                    <label class="field-label mb-0" for="cmp-agent">{{ t('The agent') }}</label>
+                    <button
+                        type="button"
+                        class="text-[11px] underline underline-offset-2 disabled:cursor-default disabled:no-underline"
+                        :disabled="agentPageLink.kind !== 'push'"
+                        data-test="agent-page-link"
+                        @click="goToHost(agentPageLink)"
+                    >
+                        {{ t('Open the agent') }}
+                    </button>
+                </div>
                 <select
                     id="cmp-agent"
                     v-model="selectedAgentId"

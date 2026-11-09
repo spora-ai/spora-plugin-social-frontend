@@ -475,6 +475,37 @@ describe('ComposerPanel — the agent panel', () => {
         expect(push).toHaveBeenCalledWith('/tasks/42')
     })
 
+    it('offers the agent’s own page, so the operator can see its chats', async () => {
+        const push = vi.fn().mockResolvedValue(undefined)
+        const context = hostContext({
+            router: { push, currentRoute: { value: { path: '/' } } },
+        })
+        const { wrapper } = await mountWithAgents([agent(1, 'The writer', ['social_post'])], context)
+
+        await composeForAgent(wrapper, 1)
+
+        const link = wrapper.find('[data-test="agent-page-link"]')
+        expect(link.exists()).toBe(true)
+        expect(link.text()).toBe('Open the agent')
+        await link.trigger('click')
+        expect(push).toHaveBeenCalledWith('/agents/1')
+    })
+
+    it('has no agent to open before one is chosen', async () => {
+        const push = vi.fn().mockResolvedValue(undefined)
+        const context = hostContext({
+            router: { push, currentRoute: { value: { path: '/' } } },
+        })
+        const { wrapper } = await mountWithAgents([agent(1, 'The writer', ['social_post'])], context)
+
+        // There is no agent to go to before one is chosen, so the link is
+        // dead rather than pointing at nothing.
+        const link = wrapper.find('[data-test="agent-page-link"]')
+        expect(link.attributes('disabled')).toBeDefined()
+        await link.trigger('click')
+        expect(push).not.toHaveBeenCalled()
+    })
+
     it('offers the agent’s tools page when the agent cannot post', async () => {
         const push = vi.fn().mockResolvedValue(undefined)
         const context = hostContext({

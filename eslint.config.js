@@ -49,6 +49,9 @@ export default [
         },
     },
     {
-        ignores: ['node_modules/', 'dist/', 'frontend/', '.vite/', 'coverage/'],
+        // A worktree is another checkout of this repository, living inside
+        // it. Linting it lints the same files twice and, because it carries
+        // its own tsconfig, leaves the parser's root ambiguous.
+        ignores: ['node_modules/', 'dist/', 'frontend/', '.vite/', 'coverage/', '.worktrees/'],
     },
 ]

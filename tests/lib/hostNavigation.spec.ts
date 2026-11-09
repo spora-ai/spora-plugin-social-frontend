@@ -1,15 +1,31 @@
 import { describe, it, expect } from 'vitest'
 import {
-    AGENT_SCHEDULES_PATH_PREFIX,
+    AGENT_PATH_PREFIX,
+    agentPath,
     agentSchedulesPath,
+    agentToolsPath,
     hostLinkAction,
     type PluginRouter,
 } from '../../src/lib/hostNavigation'
 
 describe('agentSchedulesPath', () => {
     it('names the host agent’s scheduled runs', () => {
-        expect(AGENT_SCHEDULES_PATH_PREFIX).toBe('/agents/')
+        expect(AGENT_PATH_PREFIX).toBe('/agents/')
         expect(agentSchedulesPath(42)).toBe('/agents/42/scheduled-runs')
+    })
+})
+
+describe('agentPath', () => {
+    it('names the agent’s own page', () => {
+        // The page that holds the agent's composer and its task history — the
+        // chats it already has.
+        expect(agentPath(42)).toBe('/agents/42')
+    })
+})
+
+describe('agentToolsPath', () => {
+    it('names the agent’s tools page', () => {
+        expect(agentToolsPath(42)).toBe('/agents/42/tools')
     })
 })
 
