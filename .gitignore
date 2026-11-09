@@ -26,4 +26,9 @@
 *.log
 /npm-debug.log*
 
+# Worktrees live inside the repository, so one line covers every branch.
+# eslint reads every tsconfig under the root, and a worktree's own makes the
+# parser's root ambiguous.
+/.worktrees/
+
 /tmp/

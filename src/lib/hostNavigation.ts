@@ -8,11 +8,11 @@
  * the coupling this boundary exists to avoid.
  */
 
-/** The host's agent-schedules route (`spora-frontend/src/router/index.ts`). */
-export const AGENT_SCHEDULES_PATH_PREFIX = '/agents/'
+/** The host's agent route prefix (`spora-frontend/src/router/index.ts`). */
+export const AGENT_PATH_PREFIX = '/agents/'
 
 export function agentSchedulesPath(agentId: number): string {
-    return `${AGENT_SCHEDULES_PATH_PREFIX}${agentId}/scheduled-runs`
+    return `${AGENT_PATH_PREFIX}${agentId}/scheduled-runs`
 }
 
 /** The host's task-chat route (`spora-frontend/src/router/index.ts`). */
@@ -23,13 +23,24 @@ export function taskChatPath(taskId: number): string {
 }
 
 /**
+ * The agent's own page — its composer and its task history.
+ *
+ * It is the screen that holds the agent's chats, so it is where an operator
+ * goes to see what the agent has been doing and what it is set up for. The
+ * scheduled runs and the tools are sections of the same agent.
+ */
+export function agentPath(agentId: number): string {
+    return `${AGENT_PATH_PREFIX}${agentId}`
+}
+
+/**
  * The agent's tools page, where the operator enables the tools it runs with.
  *
  * It sits under the same `/agents/{id}` prefix as the scheduled runs, so the
  * path is built from that one.
  */
 export function agentToolsPath(agentId: number): string {
-    return `${AGENT_SCHEDULES_PATH_PREFIX}${agentId}/tools`
+    return `${AGENT_PATH_PREFIX}${agentId}/tools`
 }
 
 /**
