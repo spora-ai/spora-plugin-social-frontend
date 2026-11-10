@@ -5,6 +5,7 @@ import App from './App.vue'
 import { appRoutes } from './lib/routes'
 import { setApi } from './api/client'
 import { createPluginI18n } from './i18n'
+import { applyThemeClass, storedTheme } from './lib/theme'
 import { HOST_CONTEXT_KEY, type PluginHostContext } from './shims'
 
 /**
@@ -86,6 +87,12 @@ const hostContext: PluginHostContext = {
 }
 
 setApi(hostContext.api)
+
+// The host puts the theme class on `<html>` and carries the toggle in its
+// navbar. The sandbox has no host, so it applies the stored theme itself —
+// otherwise the `dark:` variants never key on anything and the sandbox is
+// light whatever the operator chose elsewhere.
+applyThemeClass(storedTheme())
 
 const app = createApp(App, { hostContext })
 app.provide(HOST_CONTEXT_KEY, hostContext)

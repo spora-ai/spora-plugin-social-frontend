@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * The app's shell: the rail (principal switcher, navigation, theme toggle) and
- * the main column (the tab's title and the resolved page).
+ * The app's shell: the rail (principal switcher and navigation) and the main
+ * column (the tab's title and the resolved page).
  *
  * **The URL and the acting principal are reconciled here, before the first
  * read.** An absent `p/{pid}` resolves to the caller's own, and a principal
@@ -18,7 +18,6 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { CalendarDays, List, PenLine, Plus, Users } from 'lucide-vue-next'
 import PrincipalSwitcher from './components/PrincipalSwitcher.vue'
-import ThemeToggle from './components/ThemeToggle.vue'
 import { useConnectedNotice } from './composables/useConnectedNotice'
 import { usePrincipalsStore } from './stores/principals'
 import { useSocialStore } from './stores/social'
@@ -152,7 +151,18 @@ async function newPost(): Promise<void> {
 </script>
 
 <template>
-    <div id="spora-plugin-social" class="flex min-h-[70vh] flex-col">
+    <!--
+        The rail's divider has to reach the bottom of the page, so the shell
+        is at least a screen tall — the rail is a flex child of a row that
+        fills it, and its `border-r` is the height of that row. A shell
+        sized to its content leaves the divider stopping in the middle of
+        the window with the page's background under it.
+
+        `min-h-screen` rather than `h-screen`: the main column scrolls
+        inside the shell when the content is long, and the shell grows with
+        it when it is longer than a screen.
+    -->
+    <div id="spora-plugin-social" class="flex min-h-screen flex-col">
         <div
             v-if="principalNotice"
             class="border-b border-border bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
@@ -207,10 +217,6 @@ async function newPost(): Promise<void> {
                         {{ tab.label }}
                     </RouterLink>
                 </nav>
-
-                <div class="shrink-0 border-t border-border p-2">
-                    <ThemeToggle />
-                </div>
             </aside>
 
             <div class="flex min-h-0 min-w-0 flex-1 flex-col">

@@ -14,7 +14,7 @@ The build is a Vite **library** build in IIFE format: `npm run build` writes `fr
 
 ## What the app does
 
-Four screens, behind a rail, with the principal switcher at the top of the rail:
+Four screens, behind a rail, with the principal switcher at the top of the rail. The rail's divider runs the full height of the page — the shell is at least a screen tall, so the divider does not stop in the middle of the window with the page's background under it:
 
 - **Compose** — the landing screen. The composer with per-channel character counters, the target account picker, the media strip and the publish/schedule controls, plus the "up next" queue and the accounts that need attention. The schedule control is the one-shot path and is unchanged by the cut of the static slot.
 
@@ -91,7 +91,9 @@ These are the extractor's `EXCLUDED_TERMS` — it leaves them in the template as
 
 ## The theme
 
-**Light by default.** The host owns the theme: `localStorage.theme` holds `'light'` or `'dark'`, the `dark` class sits on `<html>`, and the host's navbar carries the toggle. The plugin reads the host's store through `hostContext.pinia` rather than keeping a second one — two stores would disagree the moment the operator used the host's toggle. There is no operating-system colour-preference query anywhere in this repo: an OS block would override the explicit choice the toggle makes.
+**Light by default, and the host's switch is the only one.** The host owns the theme: `localStorage.theme` holds `'light'` or `'dark'`, the `dark` class sits on `<html>`, and the host's navbar carries the toggle. The plugin has no toggle of its own — a second control for the same value in the rail is a control the two can disagree about — and reads nothing: the `dark:` variants key on the class the host puts there. There is no operating-system colour-preference query anywhere in this repo: an OS block would override the explicit choice the toggle makes.
+
+The one thing left to the plugin is the **dev sandbox**, which stands in for the host and has no navbar to carry a toggle: `src/dev-main.ts` applies the stored theme class itself, so the sandbox is not light whatever the operator chose elsewhere.
 
 ## Connections, not platforms
 
@@ -147,7 +149,7 @@ CI runs lint, type-check, the catalogue gate, the tests, the build, the smoke ch
 - `tests/components/` — the principal switcher, the media strip, the accounts grid, the analytics view, the posts table and the calendar grid.
 - `tests/pages/` — the two views of the Posts tab, the composer, the accounts and the calendar.
 - `tests/api/social.spec.ts` — the exact paths and the shapes.
-- `tests/lib/theme.spec.ts` — light on load, the toggle, the persisted value.
+- `tests/lib/theme.spec.ts` — the stored value, the class on `<html>`, and that the plugin carries no toggle of its own.
 
 ## Releasing
 

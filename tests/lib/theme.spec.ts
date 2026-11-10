@@ -1,10 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { applyThemeClass, hostThemeStore, storedTheme, THEME_STORAGE_KEY } from '../../src/lib/theme'
-import { useTheme } from '../../src/composables/useTheme'
-import { HOST_CONTEXT_KEY } from '../../src/shims'
+import { applyThemeClass, storedTheme, THEME_STORAGE_KEY } from '../../src/lib/theme'
 
 /** Every source file, so the theme contract can be checked against the whole app. */
 function sourceFiles(dir: string): string[] {
@@ -53,88 +50,15 @@ describe('the theme', () => {
         }
     })
 
-    it('is light on load and toggles into dark, persisting the choice', async () => {
-        const wrapper = mount({
-            setup() {
-                const { isDark, toggle } = useTheme()
-                return { isDark, toggle }
-            },
-            template: '<button type="button" @click="toggle">toggle</button>',
-        })
-
-        // Light on load: no `dark` class, and the stored value untouched.
-        expect(document.documentElement.classList.contains('dark')).toBe(false)
-        expect(wrapper.vm.isDark).toBe(false)
-
-        await wrapper.find('button').trigger('click')
-
-        expect(document.documentElement.classList.contains('dark')).toBe(true)
-        expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark')
-        expect(wrapper.vm.isDark).toBe(true)
-
-        await wrapper.find('button').trigger('click')
-
-        expect(document.documentElement.classList.contains('dark')).toBe(false)
-        expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('light')
-    })
-
-    it('uses the host’s store when the host published one', async () => {
-        let toggled = 0
-        const hostStore = {
-            isDark: false,
-            toggle: () => {
-                toggled += 1
-                hostStore.isDark = !hostStore.isDark
-            },
+    it('has no toggle of its own', () => {
+        // The host's navbar carries the switch. A second one in the plugin's
+        // rail is a second control for the same value, and the two disagree
+        // the moment the operator uses the host's.
+        for (const file of sourceFiles(join(process.cwd(), 'src'))) {
+            const source = readFileSync(file, 'utf8')
+            expect(source).not.toContain('useTheme')
+            expect(source).not.toContain('ThemeToggle')
         }
-        const pinia = { _s: new Map([['theme', hostStore]]) }
-
-        const wrapper = mount(
-            {
-                setup() {
-                    const { isDark, toggle } = useTheme()
-                    return { isDark, toggle }
-                },
-                template: '<button type="button" @click="toggle">toggle</button>',
-            },
-            {
-                global: {
-                    provide: {
-                        // The host hands the plugin its Pinia; the theme store is
-                        // registered there under the id `theme`.
-                        [HOST_CONTEXT_KEY as symbol]: {
-                            api: {},
-                            pinia,
-                            theme: 'light',
-                            locale: 'en',
-                            route: null,
-                            router: null,
-                            openMediaPicker: async () => [],
-                        },
-                    },
-                },
-            },
-        )
-
-        await wrapper.find('button').trigger('click')
-
-        // The host's store owns the toggle — the plugin does not keep a second one.
-        expect(toggled).toBe(1)
-        expect(wrapper.vm.isDark).toBe(true)
-    })
-
-    it('finds no host store in a bare Pinia', () => {
-        expect(hostThemeStore(null)).toBeNull()
-        expect(hostThemeStore({})).toBeNull()
-        expect(hostThemeStore({ _s: new Map() })).toBeNull()
-        expect(hostThemeStore({ _s: 'not a map' })).toBeNull()
-        expect(hostThemeStore({ _s: new Map([['theme', { isDark: false }]]) })).toBeNull()
-    })
-
-    it('finds the store the host published', () => {
-        const store = { isDark: true, toggle: vi.fn() }
-
-        expect(hostThemeStore({ _s: new Map([['theme', store]]) })).toBe(store)
     })
 })
 
