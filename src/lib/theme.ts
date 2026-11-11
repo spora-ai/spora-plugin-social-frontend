@@ -1,6 +1,11 @@
 /**
  * The theme contract, as the host states it.
  *
+ * **The host owns the theme.** It keeps the value in `localStorage.theme`,
+ * puts the `dark` class on `<html>` and carries the toggle in its navbar —
+ * so the plugin has no toggle of its own and reads nothing: the `dark:`
+ * variants and the `.dark` token block key on the class the host puts there.
+ *
  * **Light is the default.** The host's theme store reads `localStorage.theme`
  * and falls back to light; it does not consult the operating system's colour
  * preference, and neither does this plugin. An OS-preference block would
@@ -8,8 +13,12 @@
  * here.
  *
  * **Dark is a class, not a media query.** `darkMode: 'class'` means the
- * `dark:` variants and the `.dark` token block apply only when the class is
- * on `<html>`.
+ * `dark:` variants and the `.dark` token block apply only when the class
+ * is on `<html>`.
+ *
+ * The one thing left to the plugin is the **sandbox**: `src/dev-main.ts`
+ * stands in for the host and there is no host to put the class on, so the
+ * sandbox applies the stored one itself.
  */
 
 /** The key the host's theme store persists under. */
@@ -27,30 +36,4 @@ export function storedTheme(): Theme {
 export function applyThemeClass(theme: Theme): void {
     if (typeof document === 'undefined') return
     document.documentElement.classList.toggle('dark', theme === 'dark')
-}
-
-/**
- * The host's theme store, when the host published one.
- *
- * The host keeps the theme in a Pinia store and hands the plugin its Pinia
- * instance through `hostContext.pinia`; the store is registered there under
- * the id `theme`. Reading it is what keeps the plugin from inventing a second
- * theme system — two systems would disagree after the operator used the
- * host's toggle.
- */
-export interface HostThemeStore {
-    isDark: boolean
-    toggle: () => void
-}
-
-export function hostThemeStore(pinia: unknown): HostThemeStore | null {
-    if (pinia === null || typeof pinia !== 'object') return null
-
-    const stores = (pinia as { _s?: unknown })._s
-    if (!(stores instanceof Map)) return null
-
-    const store = stores.get('theme') as HostThemeStore | undefined
-    if (store === undefined || typeof store.toggle !== 'function') return null
-
-    return store
 }
