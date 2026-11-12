@@ -1,7 +1,7 @@
 {
     "name": "spora-ai/spora-plugin-social-frontend",
     "private": true,
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Vue IIFE bundle for the Spora social publishing app. Built and shipped as type spora-plugin-frontend.",
     "type": "module",
     "scripts": {
