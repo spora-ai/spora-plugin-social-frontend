@@ -67,7 +67,6 @@ export const CONFIG_PAYLOAD = {
         },
     },
     app_url: 'https://spora.example.com',
-    app_url_public: true,
     rules: {
         'direct:linkedin': {
             label: 'LinkedIn',
@@ -224,7 +223,6 @@ export const UNCONFIGURED_CONFIG_PAYLOAD = {
     },
     aggregators: CONFIG_PAYLOAD.aggregators,
     app_url: 'https://spora.example.com',
-    app_url_public: true,
     rules: CONFIG_PAYLOAD.rules,
 } satisfies SocialConfig
 

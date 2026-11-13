@@ -34,12 +34,56 @@ export const useSocialStore = defineStore('social', () => {
     /** The read of the config, while it is in flight. */
     let configPromise: Promise<void> | null = null
     /**
+     * The principal the in-flight config read is for.
+     *
+     * Tracked apart from the principal the *resolved* config belongs to: a
+     * read that has not landed yet has no principal to compare a second
+     * caller against, and that caller has to find the read already on its
+     * way instead of asking a second time.
+     */
+    let configPendingPrincipalId: number | null = null
+    /**
      * The principal the cached config belongs to.
      *
      * The aggregators' flags are the principal's — the key is the operator's
      * — so a config read for one principal says nothing about another's.
      */
     let configPrincipalId: number | null = null
+    /**
+     * Counts the config reads.
+     *
+     * A read for the principal the operator has left answers after the one
+     * for the principal they are on now — and it must not overwrite it.
+     */
+    let configToken = 0
+
+    /** The read of the connections, while it is in flight. */
+    let connectionsPromise: Promise<void> | null = null
+    /**
+     * The principal the in-flight connections read is for.
+     *
+     * Apart from the principal the loaded ones belong to: a read that has
+     * not landed yet has no principal to compare a second caller against.
+     */
+    let connectionsPendingPrincipalId: number | null = null
+    /** The principal the connections on screen belong to. */
+    let connectionsPrincipalId: number | null = null
+    /**
+     * The connections on screen are the ones from before the last read.
+     *
+     * A read that has not answered yet confirms nothing, and a refresh that
+     * failed confirms less: the list may stay on screen — an empty grid
+     * would be worse — but it is not what the backend says now, so the next
+     * caller has to ask again.
+     */
+    let connectionsStale = false
+    /**
+     * Counts the connections reads.
+     *
+     * A read for the principal the operator has left answers after the one
+     * for the principal they are on now — and it must not overwrite it.
+     */
+    let connectionsToken = 0
 
     const connections = ref<SocialConnection[]>([])
     const posts = ref<SocialPost[]>([])
@@ -89,12 +133,59 @@ export const useSocialStore = defineStore('social', () => {
         notice.value = message
     }
 
-    async function loadConnections(principalId: number): Promise<void> {
-        try {
-            connections.value = await socialApi.listConnections(principalId)
-        } catch (e) {
-            fail(e, t('Could not load the connections.'))
+    /**
+     * The connections of a principal, and the accounts they cover.
+     *
+     * Read once per principal, like the config: two owners asking for the
+     * same principal's connections are one question, and the second caller
+     * waits for the read that is already on its way.
+     */
+    async function loadConnections(principalId: number, force = false): Promise<void> {
+        if (!force) {
+            if (connectionsPendingPrincipalId === principalId && connectionsPromise !== null) {
+                return connectionsPromise
+            }
+
+            // The connections are here and they are this principal's.
+            if (connectionsPrincipalId === principalId && !connectionsStale) return
         }
+
+        const token = ++connectionsToken
+        connectionsPendingPrincipalId = principalId
+
+        if (connectionsPrincipalId !== principalId) {
+            // The accounts on screen belong to the principal being left;
+            // showing them under the new one would be a lie about whose
+            // accounts they are.
+            connections.value = []
+            connectionsPrincipalId = null
+        }
+
+        // The read has not answered yet, so nothing on screen is confirmed.
+        connectionsStale = true
+
+        connectionsPromise = (async () => {
+            try {
+                const loaded = await socialApi.listConnections(principalId)
+                if (token !== connectionsToken) return
+                connections.value = loaded
+                connectionsPrincipalId = principalId
+                connectionsStale = false
+            } catch (e) {
+                if (token !== connectionsToken) return
+                fail(e, t('Could not load the connections.'))
+            } finally {
+                // Only the newest read may clear the pending state: an older
+                // one that lands later must not un-claim the read that
+                // replaced it.
+                if (token === connectionsToken) {
+                    connectionsPendingPrincipalId = null
+                    connectionsPromise = null
+                }
+            }
+        })()
+
+        return connectionsPromise
     }
 
     async function loadPosts(principalId: number, query: PostQuery = {}): Promise<void> {
@@ -124,6 +215,20 @@ export const useSocialStore = defineStore('social', () => {
     }
 
     /**
+     * Give up on the read that is in flight.
+     *
+     * The token moves on, so the answer is discarded when it lands, and the
+     * pending state goes with it: the next caller starts a read of its own
+     * rather than joining one whose answer is thrown away.
+     */
+    function abandonConfigRead(): void {
+        if (configPendingPrincipalId === null) return
+        configToken++
+        configPendingPrincipalId = null
+        configPromise = null
+    }
+
+    /**
      * The config: the provider entries, the aggregators and the rules every
      * screen reads.
      *
@@ -140,23 +245,45 @@ export const useSocialStore = defineStore('social', () => {
      * another config — and a forced read is what a changed key asks for.
      */
     async function loadConfig(principalId: number, force = false): Promise<void> {
-        if (
-            configPromise !== null &&
-            configError.value === null &&
-            !force &&
-            configPrincipalId === principalId
-        ) {
-            return configPromise
+        if (!force) {
+            if (configPendingPrincipalId === principalId && configPromise !== null) {
+                return configPromise
+            }
+
+            // The config is here and it is this principal's.
+            if (configPrincipalId === principalId && configError.value === null) {
+                // The app is on this principal, so a read for another one is
+                // for a principal the operator has left — and its answer must
+                // not land on this config.
+                abandonConfigRead()
+                return
+            }
         }
+
+        const token = ++configToken
+        configPendingPrincipalId = principalId
 
         configPromise = (async () => {
             try {
-                config.value = await socialApi.getConfig(principalId)
+                const loaded = await socialApi.getConfig(principalId)
+                // A read for the principal the operator has left answers late;
+                // it must not overwrite the config of the one they are on.
+                if (token !== configToken) return
+                config.value = loaded
                 configPrincipalId = principalId
                 configError.value = null
             } catch (e) {
+                if (token !== configToken) return
                 configError.value = apiMessage(e, t('Could not read the plugin configuration.'))
                 fail(e, t('Could not read the plugin configuration.'))
+            } finally {
+                // Only the newest read may clear the pending state: an older
+                // one that lands later must not un-claim the read that
+                // replaced it.
+                if (token === configToken) {
+                    configPendingPrincipalId = null
+                    configPromise = null
+                }
             }
         })()
 
@@ -229,7 +356,7 @@ export const useSocialStore = defineStore('social', () => {
     ): Promise<AggregatorResult | null> {
         try {
             const result = await socialApi.setAggregatorKey(principalId, aggregator, apiKey)
-            await Promise.all([loadConnections(principalId), loadConfig(principalId, true)])
+            await Promise.all([loadConnections(principalId, true), loadConfig(principalId, true)])
             return result
         } catch (e) {
             fail(e, t('Could not save the key.'))
@@ -249,7 +376,7 @@ export const useSocialStore = defineStore('social', () => {
     ): Promise<AggregatorResult | null> {
         try {
             const result = await socialApi.forgetAggregator(principalId, aggregator)
-            await Promise.all([loadConnections(principalId), loadConfig(principalId, true)])
+            await Promise.all([loadConnections(principalId, true), loadConfig(principalId, true)])
             return result
         } catch (e) {
             fail(e, t('Could not forget the key.'))
@@ -261,7 +388,7 @@ export const useSocialStore = defineStore('social', () => {
     async function syncAggregator(principalId: number, aggregator: string): Promise<boolean> {
         try {
             await socialApi.syncAggregator(principalId, aggregator)
-            await loadConnections(principalId)
+            await loadConnections(principalId, true)
             return true
         } catch (e) {
             fail(e, t('Could not read the accounts.'))

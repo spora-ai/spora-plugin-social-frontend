@@ -246,11 +246,10 @@ describe('api/social — the shapes', () => {
         expect(config.providers.meta.config_id).toBe('9876')
         expect(config.providers.linkedin.config_id).toBeNull()
         expect(config.app_url).toBe('https://spora.example.com')
-        expect(config.app_url_public).toBe(true)
     })
 
     it('treats a provider entry that is absent as not configured', async () => {
-        get.mockResolvedValueOnce({ app_url: null, app_url_public: false })
+        get.mockResolvedValueOnce({ app_url: null })
         const config = await social.getConfig(3)
 
         expect(config.providers.meta).toEqual({
@@ -262,7 +261,6 @@ describe('api/social — the shapes', () => {
         })
         expect(config.providers.linkedin.configured).toBe(false)
         expect(config.app_url).toBeNull()
-        expect(config.app_url_public).toBe(false)
     })
 
     it('treats a missing field of an entry as not configured', async () => {

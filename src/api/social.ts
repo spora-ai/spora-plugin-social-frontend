@@ -190,7 +190,6 @@ export async function getConfig(principalId: number): Promise<SocialConfig> {
         },
         aggregators: readAggregators(result.aggregators),
         app_url: result.app_url ?? null,
-        app_url_public: result.app_url_public === true,
         rules: result.rules ?? ({} as SocialConfig['rules']),
     }
 }

@@ -554,7 +554,6 @@ export interface SocialConfig {
      */
     aggregators: Record<string, AggregatorConfig>
     app_url: string | null
-    app_url_public: boolean
     /** The rules, keyed by the channel's key. */
     rules: Record<string, PlatformRules>
 }
