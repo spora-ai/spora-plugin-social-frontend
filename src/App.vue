@@ -67,6 +67,11 @@ const principalNotice = ref<string | null>(null)
  * Put the acting principal into the URL, and the URL's principal into the
  * store. An inaccessible one falls back to the default *and* has its path
  * rewritten; a principal-less path is canonicalised too.
+ *
+ * **The reads start here.** The principal is the one thing every read is
+ * scoped by, so this is where the app's own reads belong: one config and one
+ * set of connections per principal, and the store answers a second caller —
+ * the accounts screen, a later visit — from the read that is already there.
  */
 async function reconcilePrincipal(): Promise<void> {
     const named = pathPrincipalId.value
@@ -84,6 +89,13 @@ async function reconcilePrincipal(): Promise<void> {
         principals.selectPrincipal(resolved)
     }
 
+    // The rules every screen reads travel with the config, and the composer
+    // needs them before it can count a body. The config names the principal:
+    // the aggregators' flags are the operator's. The two reads go out
+    // together — the config's latency must not hold the connections back.
+    void social.loadConfig(resolved)
+    void social.loadConnections(resolved)
+
     const canonical = canonicalLocalPath(route.path, route.name, resolved)
     if (canonical !== null && canonical !== route.path) {
         // The query travels: the OAuth callback comes back with
@@ -99,13 +111,6 @@ onMounted(async () => {
     // The callback's query is read after the URL is canonical, so the notice
     // and the address bar name the same screen.
     await announceConnected()
-    // The rules every screen reads travel with the config, and the composer
-    // needs them before it can count a body. The config names the principal:
-    // the aggregators' flags are the operator's.
-    if (principalId.value !== null) {
-        await social.loadConfig(principalId.value)
-        await social.loadConnections(principalId.value)
-    }
 })
 
 // A host navigation can land on a principal the store is not on yet; the `replace` mirrors back
@@ -113,15 +118,6 @@ onMounted(async () => {
 // cleared — a path change is often this very handler raising it.
 watch(pathPrincipalId, () => {
     void reconcilePrincipal()
-})
-
-// The accounts belong to the principal, so a scope change re-reads them —
-// and the config with them, because the aggregators' flags are the
-// principal's.
-watch(principalId, (next, prev) => {
-    if (next === null || next === prev) return
-    void social.loadConnections(next)
-    void social.loadConfig(next)
 })
 
 /**

@@ -57,7 +57,6 @@ const emptyApi = {
                     },
                 },
                 app_url: 'http://localhost:5195',
-                app_url_public: false,
                 rules: {},
             } as unknown as T)
         }

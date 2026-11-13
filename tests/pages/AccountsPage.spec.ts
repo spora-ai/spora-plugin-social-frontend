@@ -222,7 +222,7 @@ describe('AccountsPage', () => {
         )
         // A config without any provider entry at all: absent means "not
         // configured", the same as a missing field — and the server says so.
-        const context = contextWith({ app_url: null, app_url_public: false }, META_ONLY)
+        const context = contextWith({ app_url: null }, META_ONLY)
         context.api.post = post as never
 
         const wrapper = mountPage(AccountsPage, pinia, router, context)

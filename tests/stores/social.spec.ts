@@ -149,6 +149,25 @@ describe('stores/social', () => {
         expect(get).toHaveBeenCalledWith('/plugins/social/config', { principal_id: 7 })
     })
 
+    it('joins the config read that is already in flight', async () => {
+        // Two owners ask for the same config at once — the app's shell and
+        // the screen inside it — and the second one must not ask again for
+        // an answer that is on its way.
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const store = useSocialStore()
+
+        const first = store.loadConfig(7)
+        const second = store.loadConfig(7)
+        release(CONFIG_PAYLOAD)
+        await Promise.all([first, second])
+
+        expect(get).toHaveBeenCalledTimes(1)
+        expect(store.config?.app_url).toBe('https://spora.example.com')
+    })
+
     it('has no rules when the config could not be read', async () => {
         get.mockRejectedValue(new Error('boom'))
         const store = useSocialStore()
@@ -290,17 +309,95 @@ describe('stores/social — the aggregator', () => {
 
     it('reads the connections again after a key is stored', async () => {
         // The aggregator's accounts are discovered rather than connected, so
-        // they are only known once the key is there.
-        get.mockResolvedValue(CONFIG_PAYLOAD)
+        // they are only known once the key is there — and the refresh has to
+        // ask again, cache or no cache.
+        get.mockImplementation((path: string) =>
+            Promise.resolve(String(path).includes('/connections') ? CONNECTIONS_PAYLOAD : CONFIG_PAYLOAD),
+        )
         const store = useSocialStore()
 
+        await store.loadConnections(7)
         await store.setAggregatorKey(7, 'zernio', 'the-key')
 
-        expect(get).toHaveBeenCalledWith('/plugins/social/connections', { principal_id: 7 })
+        expect(get.mock.calls.filter((call) => String(call[0]).includes('/connections'))).toHaveLength(2)
+    })
+
+    it('reads the connections again after a sync', async () => {
+        // A sync brings accounts the aggregator found since the last read.
+        get.mockImplementation((path: string) =>
+            Promise.resolve(String(path).includes('/connections') ? CONNECTIONS_PAYLOAD : CONFIG_PAYLOAD),
+        )
+        const store = useSocialStore()
+
+        await store.loadConnections(7)
+        await store.syncAggregator(7, 'zernio')
+
+        expect(get.mock.calls.filter((call) => String(call[0]).includes('/connections'))).toHaveLength(2)
     })
 })
 
 describe('stores/social — the connections', () => {
+    it('joins the connections read that is already in flight', async () => {
+        // The app's shell and the accounts screen ask for the same
+        // connections at once; the second one waits for the read that is
+        // already on its way.
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const store = useSocialStore()
+
+        const first = store.loadConnections(7)
+        const second = store.loadConnections(7)
+        release(CONNECTIONS_PAYLOAD)
+        await Promise.all([first, second])
+
+        expect(get).toHaveBeenCalledTimes(1)
+        expect(store.connections).toHaveLength(3)
+    })
+
+    it('reads the connections of a principal once', async () => {
+        get.mockResolvedValue(CONNECTIONS_PAYLOAD)
+        const store = useSocialStore()
+
+        await store.loadConnections(7)
+        await store.loadConnections(7)
+
+        expect(get).toHaveBeenCalledTimes(1)
+    })
+
+    it('reads the connections again for another principal', async () => {
+        // The connections belong to the principal.
+        get.mockResolvedValue(CONNECTIONS_PAYLOAD)
+        const store = useSocialStore()
+
+        await store.loadConnections(7)
+        await store.loadConnections(9)
+
+        expect(get).toHaveBeenCalledTimes(2)
+    })
+
+    it('drops the connections of the principal being left', async () => {
+        // The accounts on screen belong to the principal that is being left;
+        // showing them under the new one would be a lie about whose
+        // accounts they are.
+        get.mockResolvedValueOnce(CONNECTIONS_PAYLOAD)
+        const store = useSocialStore()
+        await store.loadConnections(7)
+        expect(store.connections).toHaveLength(3)
+
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const pending = store.loadConnections(9)
+
+        expect(store.connections).toEqual([])
+
+        release([])
+        await pending
+    })
+
     it('disconnects a connection and drops it from the list', async () => {
         get.mockResolvedValueOnce(CONNECTIONS_PAYLOAD)
         const store = useSocialStore()
