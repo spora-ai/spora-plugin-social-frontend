@@ -69,6 +69,15 @@ export const useSocialStore = defineStore('social', () => {
     /** The principal the connections on screen belong to. */
     let connectionsPrincipalId: number | null = null
     /**
+     * The connections on screen are the ones from before the last read.
+     *
+     * A read that has not answered yet confirms nothing, and a refresh that
+     * failed confirms less: the list may stay on screen — an empty grid
+     * would be worse — but it is not what the backend says now, so the next
+     * caller has to ask again.
+     */
+    let connectionsStale = false
+    /**
      * Counts the connections reads.
      *
      * A read for the principal the operator has left answers after the one
@@ -138,7 +147,7 @@ export const useSocialStore = defineStore('social', () => {
             }
 
             // The connections are here and they are this principal's.
-            if (connectionsPrincipalId === principalId) return
+            if (connectionsPrincipalId === principalId && !connectionsStale) return
         }
 
         const token = ++connectionsToken
@@ -152,12 +161,16 @@ export const useSocialStore = defineStore('social', () => {
             connectionsPrincipalId = null
         }
 
+        // The read has not answered yet, so nothing on screen is confirmed.
+        connectionsStale = true
+
         connectionsPromise = (async () => {
             try {
                 const loaded = await socialApi.listConnections(principalId)
                 if (token !== connectionsToken) return
                 connections.value = loaded
                 connectionsPrincipalId = principalId
+                connectionsStale = false
             } catch (e) {
                 if (token !== connectionsToken) return
                 fail(e, t('Could not load the connections.'))
@@ -202,6 +215,20 @@ export const useSocialStore = defineStore('social', () => {
     }
 
     /**
+     * Give up on the read that is in flight.
+     *
+     * The token moves on, so the answer is discarded when it lands, and the
+     * pending state goes with it: the next caller starts a read of its own
+     * rather than joining one whose answer is thrown away.
+     */
+    function abandonConfigRead(): void {
+        if (configPendingPrincipalId === null) return
+        configToken++
+        configPendingPrincipalId = null
+        configPromise = null
+    }
+
+    /**
      * The config: the provider entries, the aggregators and the rules every
      * screen reads.
      *
@@ -224,7 +251,13 @@ export const useSocialStore = defineStore('social', () => {
             }
 
             // The config is here and it is this principal's.
-            if (configPrincipalId === principalId && configError.value === null) return
+            if (configPrincipalId === principalId && configError.value === null) {
+                // The app is on this principal, so a read for another one is
+                // for a principal the operator has left — and its answer must
+                // not land on this config.
+                abandonConfigRead()
+                return
+            }
         }
 
         const token = ++configToken

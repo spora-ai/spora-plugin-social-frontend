@@ -168,6 +168,30 @@ describe('stores/social', () => {
         expect(store.config?.app_url).toBe('https://spora.example.com')
     })
 
+    it('does not let a late read land on the cached config', async () => {
+        // The app is on principal 7 and a read for 9 is on its way. The
+        // answer for 9 belongs to a principal the operator has left: it must
+        // not land on the config of 7.
+        get.mockResolvedValue(CONFIG_PAYLOAD)
+        const store = useSocialStore()
+        await store.loadConfig(7)
+
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const other = store.loadConfig(9)
+
+        // The cache answers for 7 — and asks for nothing.
+        await store.loadConfig(7)
+        expect(get).toHaveBeenCalledTimes(2)
+
+        release({ ...CONFIG_PAYLOAD, app_url: 'https://nine.example.com' })
+        await other
+
+        expect(store.config?.app_url).toBe('https://spora.example.com')
+    })
+
     it('has no rules when the config could not be read', async () => {
         get.mockRejectedValue(new Error('boom'))
         const store = useSocialStore()
@@ -396,6 +420,36 @@ describe('stores/social — the connections', () => {
 
         release([])
         await pending
+    })
+
+    it('asks again after a refresh that failed', async () => {
+        // The refresh is what tells the operator that the key took effect. A
+        // failed one must not leave the connections from before it cached as
+        // current, or nobody asks again.
+        get.mockResolvedValue(CONNECTIONS_PAYLOAD)
+        const store = useSocialStore()
+        await store.loadConnections(7)
+
+        get.mockRejectedValueOnce(new Error('boom'))
+        await store.loadConnections(7, true)
+
+        // The list on screen is the one from before the refresh. It may stay
+        // there — an empty grid would be worse — but it is not what the
+        // backend says now.
+        expect(store.connections).toHaveLength(3)
+
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const retry = store.loadConnections(7)
+
+        // The retry asks again, and the list stays until it answers.
+        expect(get.mock.calls.filter((call) => String(call[0]).includes('/connections'))).toHaveLength(3)
+        expect(store.connections).toHaveLength(3)
+
+        release(CONNECTIONS_PAYLOAD)
+        await retry
     })
 
     it('disconnects a connection and drops it from the list', async () => {
