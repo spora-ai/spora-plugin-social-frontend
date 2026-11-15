@@ -149,6 +149,49 @@ describe('stores/social', () => {
         expect(get).toHaveBeenCalledWith('/plugins/social/config', { principal_id: 7 })
     })
 
+    it('joins the config read that is already in flight', async () => {
+        // Two owners ask for the same config at once — the app's shell and
+        // the screen inside it — and the second one must not ask again for
+        // an answer that is on its way.
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const store = useSocialStore()
+
+        const first = store.loadConfig(7)
+        const second = store.loadConfig(7)
+        release(CONFIG_PAYLOAD)
+        await Promise.all([first, second])
+
+        expect(get).toHaveBeenCalledTimes(1)
+        expect(store.config?.app_url).toBe('https://spora.example.com')
+    })
+
+    it('does not let a late read land on the cached config', async () => {
+        // The app is on principal 7 and a read for 9 is on its way. The
+        // answer for 9 belongs to a principal the operator has left: it must
+        // not land on the config of 7.
+        get.mockResolvedValue(CONFIG_PAYLOAD)
+        const store = useSocialStore()
+        await store.loadConfig(7)
+
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const other = store.loadConfig(9)
+
+        // The cache answers for 7 — and asks for nothing.
+        await store.loadConfig(7)
+        expect(get).toHaveBeenCalledTimes(2)
+
+        release({ ...CONFIG_PAYLOAD, app_url: 'https://nine.example.com' })
+        await other
+
+        expect(store.config?.app_url).toBe('https://spora.example.com')
+    })
+
     it('has no rules when the config could not be read', async () => {
         get.mockRejectedValue(new Error('boom'))
         const store = useSocialStore()
@@ -290,17 +333,125 @@ describe('stores/social — the aggregator', () => {
 
     it('reads the connections again after a key is stored', async () => {
         // The aggregator's accounts are discovered rather than connected, so
-        // they are only known once the key is there.
-        get.mockResolvedValue(CONFIG_PAYLOAD)
+        // they are only known once the key is there — and the refresh has to
+        // ask again, cache or no cache.
+        get.mockImplementation((path: string) =>
+            Promise.resolve(String(path).includes('/connections') ? CONNECTIONS_PAYLOAD : CONFIG_PAYLOAD),
+        )
         const store = useSocialStore()
 
+        await store.loadConnections(7)
         await store.setAggregatorKey(7, 'zernio', 'the-key')
 
-        expect(get).toHaveBeenCalledWith('/plugins/social/connections', { principal_id: 7 })
+        expect(get.mock.calls.filter((call) => String(call[0]).includes('/connections'))).toHaveLength(2)
+    })
+
+    it('reads the connections again after a sync', async () => {
+        // A sync brings accounts the aggregator found since the last read.
+        get.mockImplementation((path: string) =>
+            Promise.resolve(String(path).includes('/connections') ? CONNECTIONS_PAYLOAD : CONFIG_PAYLOAD),
+        )
+        const store = useSocialStore()
+
+        await store.loadConnections(7)
+        await store.syncAggregator(7, 'zernio')
+
+        expect(get.mock.calls.filter((call) => String(call[0]).includes('/connections'))).toHaveLength(2)
     })
 })
 
 describe('stores/social — the connections', () => {
+    it('joins the connections read that is already in flight', async () => {
+        // The app's shell and the accounts screen ask for the same
+        // connections at once; the second one waits for the read that is
+        // already on its way.
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const store = useSocialStore()
+
+        const first = store.loadConnections(7)
+        const second = store.loadConnections(7)
+        release(CONNECTIONS_PAYLOAD)
+        await Promise.all([first, second])
+
+        expect(get).toHaveBeenCalledTimes(1)
+        expect(store.connections).toHaveLength(3)
+    })
+
+    it('reads the connections of a principal once', async () => {
+        get.mockResolvedValue(CONNECTIONS_PAYLOAD)
+        const store = useSocialStore()
+
+        await store.loadConnections(7)
+        await store.loadConnections(7)
+
+        expect(get).toHaveBeenCalledTimes(1)
+    })
+
+    it('reads the connections again for another principal', async () => {
+        // The connections belong to the principal.
+        get.mockResolvedValue(CONNECTIONS_PAYLOAD)
+        const store = useSocialStore()
+
+        await store.loadConnections(7)
+        await store.loadConnections(9)
+
+        expect(get).toHaveBeenCalledTimes(2)
+    })
+
+    it('drops the connections of the principal being left', async () => {
+        // The accounts on screen belong to the principal that is being left;
+        // showing them under the new one would be a lie about whose
+        // accounts they are.
+        get.mockResolvedValueOnce(CONNECTIONS_PAYLOAD)
+        const store = useSocialStore()
+        await store.loadConnections(7)
+        expect(store.connections).toHaveLength(3)
+
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const pending = store.loadConnections(9)
+
+        expect(store.connections).toEqual([])
+
+        release([])
+        await pending
+    })
+
+    it('asks again after a refresh that failed', async () => {
+        // The refresh is what tells the operator that the key took effect. A
+        // failed one must not leave the connections from before it cached as
+        // current, or nobody asks again.
+        get.mockResolvedValue(CONNECTIONS_PAYLOAD)
+        const store = useSocialStore()
+        await store.loadConnections(7)
+
+        get.mockRejectedValueOnce(new Error('boom'))
+        await store.loadConnections(7, true)
+
+        // The list on screen is the one from before the refresh. It may stay
+        // there — an empty grid would be worse — but it is not what the
+        // backend says now.
+        expect(store.connections).toHaveLength(3)
+
+        let release: (payload: unknown) => void = () => {}
+        get.mockImplementationOnce(
+            () => new Promise((resolve) => { release = resolve }),
+        )
+        const retry = store.loadConnections(7)
+
+        // The retry asks again, and the list stays until it answers.
+        expect(get.mock.calls.filter((call) => String(call[0]).includes('/connections'))).toHaveLength(3)
+        expect(store.connections).toHaveLength(3)
+
+        release(CONNECTIONS_PAYLOAD)
+        await retry
+    })
+
     it('disconnects a connection and drops it from the list', async () => {
         get.mockResolvedValueOnce(CONNECTIONS_PAYLOAD)
         const store = useSocialStore()

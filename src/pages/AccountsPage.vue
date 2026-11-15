@@ -57,7 +57,9 @@ onMounted(async () => {
 
 watch(principalId, async (next, prev) => {
     if (next === null || next === prev) return
-    await social.loadConnections(next)
+    // The connections *and* the config belong to the principal: the grid
+    // reads the aggregator's own name out of the config.
+    await Promise.all([social.loadConnections(next), social.loadConfig(next)])
 })
 
 /**
