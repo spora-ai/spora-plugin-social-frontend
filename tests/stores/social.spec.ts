@@ -391,7 +391,6 @@ describe('stores/social — the connections', () => {
     })
 
     it('reads the connections again for another principal', async () => {
-        // The connections belong to the principal.
         get.mockResolvedValue(CONNECTIONS_PAYLOAD)
         const store = useSocialStore()
 

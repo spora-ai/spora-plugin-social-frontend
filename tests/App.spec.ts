@@ -107,8 +107,11 @@ describe('the reads', () => {
 
     /**
      * The app as it comes up cold: no principal has been chosen yet, so the
-     * app resolves one itself — and the read it starts and the one the
-     * screen inside it starts are in flight at the same time.
+     * app resolves one itself.
+     *
+     * The routes are stubbed, so the app is the only owner that reads here —
+     * the accounts screen is mounted in its own spec. Two owners asking for
+     * the same principal at once is the store's spec.
      *
      * With `selected`, the principal is already chosen and the app has
      * nothing left to resolve.
@@ -147,8 +150,7 @@ describe('the reads', () => {
     it('reads the config and the connections once for the principal', async () => {
         const { get } = await mountCold('/p/7/compose')
 
-        // One answer per question: the rules and the accounts are read once
-        // each, however many owners ask for them.
+        // One answer per question: the rules and the accounts are read once each.
         expect(reads(get, '/config')).toBe(1)
         expect(reads(get, '/connections')).toBe(1)
     })
