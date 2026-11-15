@@ -31,7 +31,6 @@ import type {
 } from '../types'
 
 export const useSocialStore = defineStore('social', () => {
-    /** The read of the config, while it is in flight. */
     let configPromise: Promise<void> | null = null
     /**
      * The principal the in-flight config read is for.
@@ -57,7 +56,6 @@ export const useSocialStore = defineStore('social', () => {
      */
     let configToken = 0
 
-    /** The read of the connections, while it is in flight. */
     let connectionsPromise: Promise<void> | null = null
     /**
      * The principal the in-flight connections read is for.
@@ -146,7 +144,6 @@ export const useSocialStore = defineStore('social', () => {
                 return connectionsPromise
             }
 
-            // The connections are here and they are this principal's.
             if (connectionsPrincipalId === principalId && !connectionsStale) return
         }
 
@@ -250,7 +247,6 @@ export const useSocialStore = defineStore('social', () => {
                 return configPromise
             }
 
-            // The config is here and it is this principal's.
             if (configPrincipalId === principalId && configError.value === null) {
                 // The app is on this principal, so a read for another one is
                 // for a principal the operator has left — and its answer must

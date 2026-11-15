@@ -89,10 +89,8 @@ async function reconcilePrincipal(): Promise<void> {
         principals.selectPrincipal(resolved)
     }
 
-    // The rules every screen reads travel with the config, and the composer
-    // needs them before it can count a body. The config names the principal:
-    // the aggregators' flags are the operator's. The two reads go out
-    // together — the config's latency must not hold the connections back.
+    // The two reads go out together — the config's latency must not hold
+    // the connections back.
     void social.loadConfig(resolved)
     void social.loadConnections(resolved)
 
